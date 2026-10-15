@@ -6,7 +6,7 @@ services:
       - "${RTMP_BIND_IP:-0.0.0.0}:${RTMP_PORT:-1935}:1935/tcp"
     environment:
       MTX_AUTHINTERNALUSERS: >-
-        [{"user":"${PUBLISH_USER:?Set PUBLISH_USER}","pass":"${PUBLISH_PASSWORD:?Set PUBLISH_PASSWORD}","ips":[],"permissions":[{"action":"publish","path":"live"}]},{"user":"${READ_USER:-relay}","pass":"${READ_PASSWORD:?Set READ_PASSWORD}","ips":[],"permissions":[{"action":"read","path":"live"}]}]
+        [{"user":"any","pass":"","ips":[],"permissions":[{"action":"publish","path":"live"}]},{"user":"${READ_USER:-relay}","pass":"${READ_PASSWORD:?Set READ_PASSWORD}","ips":[],"permissions":[{"action":"read","path":"live"}]}]
     volumes:
       - type: bind
         source: ${MEDIAMTX_CONFIG:-/opt/basket-live/config/mediamtx.yml}
