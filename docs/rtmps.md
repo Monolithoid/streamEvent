@@ -130,6 +130,10 @@ existant ne devient pas automatiquement renouvelable par l'installation du plugi
    lorsqu'elle n'est plus utilisée par un autre service.
 7. Enregistrer et redéployer. La recréation du relais peut couper la sortie YouTube.
 
+Le chemin par défaut des certificats est `/opt/basket-live/certs`, surchargeable
+par `RTMPS_CERTS_DIR`. La source utilise `${RTMPS_CERTS_DIR:-/opt/basket-live/certs}` :
+le validateur de volumes Coolify accepte cette valeur par défaut, mais pas la
+syntaxe Compose `${RTMPS_CERTS_DIR:?message}`.
 Le montage échoue explicitement si le dossier des certificats n'existe pas.
 Dans les logs MediaMTX, vérifier l'ouverture du listener RTMPS sur `:1936` et
 l'absence d'erreur de chargement du certificat/de la clé.
