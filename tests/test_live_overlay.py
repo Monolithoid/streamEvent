@@ -9,6 +9,7 @@ import time
 import unittest
 
 from PIL import Image
+from web.app import create_app
 
 spec = importlib.util.spec_from_file_location('live_controller', Path(__file__).parents[1] / 'scripts/stream_controller.py')
 c = importlib.util.module_from_spec(spec)
@@ -22,12 +23,26 @@ class LiveOverlayTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             overlay = Path(directory) / 'overlay.png'
             output_path = Path(directory) / 'output.flv'
+            base = Path(directory) / 'base.png'
+            Image.new('RGBA', (64, 64)).save(base)
+            app = create_app(dict(TESTING=True, SECRET_KEY='encoder-test-only', AUTH_CONFIGURED=True,
+                                  GOOGLE_CLIENT_ID='test', GOOGLE_CLIENT_SECRET='test',
+                                  WEB_PUBLIC_URL='https://console.example', ALLOWED_EMAILS='admin@example.com',
+                                  DATA_DIR=directory, BASE_IMAGE=str(base), WIDTH=64, HEIGHT=64))
+            client = app.test_client()
+            with client.session_transaction() as session:
+                session.update(email='admin@example.com', csrf='test-csrf')
             def replace(color):
-                image = Image.new('RGBA', (64, 64))
-                image.paste(color, (0, 0, 32, 32))
-                temporary = overlay.with_suffix('.tmp')
-                image.save(temporary, format='PNG')
-                temporary.replace(overlay)
+                document = client.get('/api/overlay').json
+                document['zones'] = [dict(label='Score', text='', x=0, y=0, width=32, height=32,
+                                          size=12, color='#FFFFFFFF', background='#' + ''.join(f'{channel:02X}' for channel in color))]
+                headers = {'X-CSRF-Token': 'test-csrf'}
+                preview = client.post('/api/preview', json=document, headers=headers)
+                self.assertEqual(preview.status_code, 200)
+                published = client.post('/api/overlay', json=document, headers=headers)
+                self.assertEqual(published.status_code, 200)
+                self.assertEqual(overlay.read_bytes(), preview.data)
+                self.assertEqual(published.json['sha256'], c.hashlib.sha256(preview.data).hexdigest())
             replace((255, 0, 0, 255))
             cfg = c.Config(width=64, height=64, fps=30, bitrate='200k', threads=1,
                            preset='ultrafast', overlay=str(overlay), output_url=str(output_path))

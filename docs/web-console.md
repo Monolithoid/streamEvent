@@ -156,6 +156,30 @@ réseau partagé avec le proxy et la santé du service `web`. Une page de connex
 HTTP 503 indique une configuration OAuth, une clé de session, une URL publique
 ou une liste de comptes manquante/invalide.
 
+## Paramètres à copier dans Streamcaster
+
+L’encart « Envoyer la vidéo vers la régie » affiche les paramètres de réception
+avec des boutons **Copier**. La clé et le mot de passe sont masqués par défaut
+et peuvent être révélés avec **Afficher**. L’encart est réservé aux comptes
+Google autorisés, comme le reste de la console.
+
+- Compose RTMPS : serveur `rtmps://ingest.monolithoid.com:1936`, clé issue de
+  `INGEST_STREAM_KEY` et authentification désactivée dans Streamcaster.
+- Compose RTMP : serveur `rtmp://ingest.monolithoid.com:1935`, clé `live`,
+  identifiant et mot de passe issus de `PUBLISH_USER` et `PUBLISH_PASSWORD`.
+
+Les deux Compose transmettent automatiquement ces paramètres au service `web`.
+L’hôte est repris de `WEB_PUBLIC_URL` ; le protocole et le port viennent du Compose
+sélectionné et de `RTMP_PORT` ou `RTMPS_PORT`. Si le serveur de réception utilise
+un autre nom public, définir `INGEST_PUBLIC_URL`, par exemple
+`rtmps://video.example.com:1936`, sans identifiants ni clé dans l’URL.
+Cette variable sert à l’affichage et ne modifie pas la configuration MediaMTX.
+
+La clé YouTube et le mot de passe de lecture interne du relais ne sont pas
+transmis à cet encart. Après mise à jour, recréer `web` pour qu’il reçoive les
+nouvelles variables du Compose. Vérifier la copie des valeurs sans les publier
+dans les logs ou captures d’écran.
+
 ## Préparer et diffuser un overlay
 
 - Ajouter des zones ou choisir « Créer un tableau de score ».
@@ -163,6 +187,8 @@ ou une liste de comptes manquante/invalide.
 - Ajuster X, Y, largeur, hauteur, taille du texte et couleurs.
 - Les couleurs utilisent `#RRGGBBAA` : `00` pour un alpha transparent,
   `FF` pour opaque. Le texte est coupé aux limites de sa zone.
+- Le champ « Nom de la zone » sert uniquement à repérer la zone dans l’éditeur ;
+  modifier « Texte affiché » pour changer le contenu visible.
 - L’aperçu est généré par le serveur avec le même rendu que l’image publiée.
   Le damier indique la transparence et ne figure pas dans le PNG.
 - Cliquer sur **Valider et diffuser** pour écrire atomiquement le PNG RGBA.
@@ -190,10 +216,39 @@ Le relais écrit toutes les deux secondes un état JSON dans `relay-status`, lu
 uniquement par la console. L’interface interroge cette donnée toutes les trois
 secondes : caméra ou image d’attente, progression de l’encodeur, format et débit
 vidéo **configuré**. Un état vieux de dix secondes est affiché comme indisponible.
-Aucune URL de diffusion, clé YouTube ou mot de passe n’est inclus.
+Aucune URL de diffusion, clé YouTube ou mot de passe n’est inclus dans ce statut.
+Les paramètres de publication affichés dans l’encart de connexion proviennent
+d’une API privée distincte.
 
 « Encodage actif » indique que FFmpeg progresse ; ce statut ne certifie pas que
 YouTube a rendu la vidéo publique. Il n’y a pas de lecteur vidéo dans la console.
+
+## Si l’overlay semble ne pas changer
+
+L’éditeur affiche « Éditeur prêt » après son chargement. À chaque modification,
+le message devient « Aperçu actualisé » une fois le nouveau PNG reçu. Les erreurs
+HTTP, de session et de script sont affichées sous l’aperçu. Les URL du script et
+de la feuille de style portent une version calculée à partir de leur contenu.
+Si le message reste sur « Chargement de l’éditeur », vérifier dans le navigateur
+que JavaScript et `/static/app.js` sont accessibles et qu’aucune politique CSP
+ajoutée par le proxy ne bloque le script, les requêtes API ou les images `blob:`.
+
+Après validation, la console compare l’empreinte du PNG enregistré à celle du
+fichier que le relais voit à `/data/overlay/overlay.png`. La confirmation indique
+que le fichier est disponible au relais ; elle ne mesure pas son apparition sur
+YouTube, qui ajoute son propre délai vidéo.
+
+- Si le relais ne confirme pas le PNG : vérifier le volume partagé `overlay-data`
+  et le chemin `OVERLAY_IMAGE` résolu dans le service `relay`.
+- Si la confirmation n’est pas fournie : vérifier que `web` **et** `relay` ont été
+  recréés avec la même nouvelle image Docker. Modifier seulement le Compose ne
+  remplace pas une ancienne image en cours d’exécution.
+- Si le PNG téléchargé change mais pas la vidéo malgré la confirmation : conserver
+  les logs de `relay`, vérifier l’image réellement exécutée et tenir compte du
+  délai de la plateforme de diffusion.
+- Si rien ne se passe dans l’éditeur : relever le message sous l’aperçu et les
+  erreurs de la console du navigateur, puis vérifier les réponses aux requêtes
+  `/api/preview` et `/api/overlay` dans l’onglet Réseau.
 
 ## Vérifications locales
 

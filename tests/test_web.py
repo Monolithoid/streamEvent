@@ -40,7 +40,7 @@ class ConsoleTests(unittest.TestCase):
         return self.client.post(path, json=document, headers={'X-CSRF-Token': 'test-csrf'})
 
     def test_all_sensitive_routes_require_auth(self):
-        for path in ['/api/status', '/api/overlay', '/api/overlay.png']:
+        for path in ['/api/status', '/api/overlay', '/api/overlay.png', '/api/ingest']:
             self.assertEqual(self.client.get(path).status_code, 401)
         for path in ['/api/preview', '/api/overlay', '/logout']:
             self.assertIn(self.client.post(path, json={}).status_code, (302, 401))
@@ -67,6 +67,7 @@ class ConsoleTests(unittest.TestCase):
         self.assertEqual(self.client.get('/api/overlay').json['revision'], 0)
         published = self.post('/api/overlay', document)
         self.assertEqual(published.status_code, 200)
+        self.assertEqual(published.json['sha256'], self.client.get('/api/overlay').json['sha256'])
         self.assertEqual(self.get_bytes('/api/overlay.png'), preview.data)
         self.assertEqual(self.post('/api/overlay', document).status_code, 409)
         restarted = create_app(self.settings)
@@ -90,6 +91,40 @@ class ConsoleTests(unittest.TestCase):
         self.assertEqual(image.size, (320, 180))
         self.assertEqual(image.getpixel((19, 9)), (255, 0, 0, 255))
         self.assertEqual(image.getpixel((20, 10))[3], 0)
+
+    def test_ingest_settings_match_selected_protocol(self):
+        for protocol, port, key in [('rtmp', '1935', 'live'), ('rtmps', '1936', 'test-private-key')]:
+            app = create_app(dict(self.settings, INGEST_PROTOCOL=protocol, INGEST_PORT=port,
+                                  INGEST_STREAM_KEY=key, PUBLISH_USER='phone', PUBLISH_PASSWORD='test-publish-only'))
+            client = app.test_client()
+            self.assertEqual(client.get('/api/ingest').status_code, 401)
+            with client.session_transaction() as session:
+                session['email'] = 'admin@example.com'
+            response = client.get('/api/ingest')
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.headers['Cache-Control'], 'no-store')
+            value = response.json
+            self.assertEqual(value['server_url'], f'{protocol}://console.example:{port}')
+            self.assertEqual(value['stream_key'], key)
+            self.assertEqual(value['authentication'], protocol == 'rtmp')
+            if protocol == 'rtmp':
+                self.assertEqual(value['username'], 'phone')
+                self.assertEqual(value['password'], 'test-publish-only')
+            else:
+                self.assertNotIn('password', value)
+                self.assertNotIn('username', value)
+            self.assertNotIn('youtube', str(value).lower())
+
+    def test_ingest_url_override_and_invalid_configuration(self):
+        for url, expected in [('rtmps://video.example:1940', 200), ('https://video.example', 503), ('rtmps://user:pass@video.example:1936', 503)]:
+            app = create_app(dict(self.settings, INGEST_PROTOCOL='rtmps', INGEST_PUBLIC_URL=url))
+            client = app.test_client()
+            with client.session_transaction() as session:
+                session['email'] = 'admin@example.com'
+            response = client.get('/api/ingest')
+            self.assertEqual(response.status_code, expected)
+            if expected == 200:
+                self.assertEqual(response.json['server_url'], url)
 
     def test_status_staleness(self):
         self.authenticate()
