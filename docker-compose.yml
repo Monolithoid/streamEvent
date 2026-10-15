@@ -52,7 +52,7 @@ services:
         read_only: true
     networks: [stream]
     read_only: true
-    tmpfs: [/tmp:size=32m,mode=1777]
+    tmpfs: ["/tmp:size=32m,mode=1777"]
     mem_limit: 1536m
     cpus: ${RELAY_CPUS:-5.0}
     pids_limit: 128
