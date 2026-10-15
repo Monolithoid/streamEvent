@@ -29,7 +29,7 @@ services:
           create_host_path: false
       # Mount the directory so renewed files are visible after a restart.
       - type: bind
-        source: ${RTMPS_CERTS_DIR:?Set RTMPS_CERTS_DIR to the VPS certificate directory}
+        source: ${RTMPS_CERTS_DIR:-/opt/basket-live/certs}
         target: /certs
         read_only: true
         bind:
