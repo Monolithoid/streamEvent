@@ -1,0 +1,23 @@
+logLevel: info
+logDestinations: [stdout]
+readTimeout: 5s
+writeTimeout: 5s
+authMethod: internal
+# Replaced by MTX_AUTHINTERNALUSERS from Compose; never store real secrets here.
+authInternalUsers: []
+api: no
+metrics: no
+pprof: no
+playback: no
+rtsp: yes
+rtspAddress: :8554
+rtspTransports: [tcp]
+rtmp: yes
+rtmpAddress: :1935
+hls: no
+webrtc: no
+srt: no
+pathDefaults:
+  overridePublisher: no
+paths:
+  live:

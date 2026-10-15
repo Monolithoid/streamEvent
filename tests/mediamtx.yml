@@ -1,0 +1,29 @@
+logLevel: warn
+authMethod: internal
+authInternalUsers:
+  - user: phone
+    pass: test-publish-only
+    permissions:
+      - action: publish
+        path: live
+  - user: relay
+    pass: test-read-only
+    permissions:
+      - action: read
+        path: live
+  - user: sink
+    pass: test-sink-only
+    permissions:
+      - action: publish
+        path: program
+      - action: read
+        path: program
+rtspTransports: [tcp]
+hls: no
+webrtc: no
+srt: no
+pathDefaults:
+  overridePublisher: no
+paths:
+  live:
+  program:

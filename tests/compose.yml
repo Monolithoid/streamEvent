@@ -1,0 +1,9 @@
+# Loopback-only, separate project and ports; never uses production credentials.
+services:
+  mediamtx:
+    image: bluenviron/mediamtx:1.15.3
+    ports:
+      - "127.0.0.1:19350:1935"
+      - "127.0.0.1:18554:8554"
+    volumes:
+      - ./mediamtx.yml:/mediamtx.yml:ro
