@@ -1,0 +1,6 @@
+*
+!scripts/
+!scripts/stream_controller.py
+!assets/
+!assets/*.png
+!LICENSE
