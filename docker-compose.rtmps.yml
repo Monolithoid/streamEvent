@@ -1,0 +1,93 @@
+# Standalone alternative to docker-compose.yml; do not merge the two files.
+# Requires a publicly trusted certificate matching the Streamcaster server name.
+services:
+  mediamtx:
+    image: bluenviron/mediamtx:1.15.3
+    restart: unless-stopped
+    ports:
+      - "${RTMPS_BIND_IP:-0.0.0.0}:${RTMPS_PORT:-1936}:1936/tcp"
+    environment:
+      # MediaMTX 1.15.3 requires indexed variables for lists of objects.
+      # Streamcaster publishes anonymously; TLS encrypts the connection.
+      MTX_AUTHINTERNALUSERS_0_USER: any
+      MTX_RTMPENCRYPTION: strict
+      MTX_RTMPSADDRESS: :1936
+      MTX_RTMPSERVERCERT: /certs/fullchain.pem
+      MTX_RTMPSERVERKEY: /certs/privkey.pem
+      MTX_AUTHINTERNALUSERS_0_PERMISSIONS_0_ACTION: publish
+      MTX_AUTHINTERNALUSERS_0_PERMISSIONS_0_PATH: live
+      MTX_AUTHINTERNALUSERS_1_USER: ${READ_USER:-relay}
+      MTX_AUTHINTERNALUSERS_1_PASS: ${READ_PASSWORD:?Set READ_PASSWORD}
+      MTX_AUTHINTERNALUSERS_1_PERMISSIONS_0_ACTION: read
+      MTX_AUTHINTERNALUSERS_1_PERMISSIONS_0_PATH: live
+    volumes:
+      - type: bind
+        source: ${MEDIAMTX_CONFIG:-/opt/basket-live/config/mediamtx.yml}
+        target: /mediamtx.yml
+        read_only: true
+        bind:
+          create_host_path: false
+      # Mount the directory so renewed files are visible after a restart.
+      - type: bind
+        source: ${RTMPS_CERTS_DIR:?Set RTMPS_CERTS_DIR to the VPS certificate directory}
+        target: /certs
+        read_only: true
+        bind:
+          create_host_path: false
+    networks: [stream]
+    mem_limit: 512m
+    cpus: 1.0
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    logging: &logs
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  relay:
+    image: ${RELAY_IMAGE:?Set RELAY_IMAGE to your published Docker Hub image}
+    restart: unless-stopped
+    init: true
+    depends_on: [mediamtx]
+    environment:
+      INPUT_URL: rtsp://mediamtx:8554/live
+      READ_USER: ${READ_USER:-relay}
+      READ_PASSWORD: ${READ_PASSWORD:?Set READ_PASSWORD}
+      YOUTUBE_RTMPS_URL: ${YOUTUBE_RTMPS_URL:-rtmps://a.rtmps.youtube.com:443/live2}
+      YOUTUBE_STREAM_KEY: ${YOUTUBE_STREAM_KEY:?Set YOUTUBE_STREAM_KEY}
+      WIDTH: ${WIDTH:-1920}
+      HEIGHT: ${HEIGHT:-1080}
+      FPS: ${FPS:-30}
+      VIDEO_BITRATE: ${VIDEO_BITRATE:-6000k}
+      ENCODER_PRESET: ${ENCODER_PRESET:-veryfast}
+      ENCODER_THREADS: ${ENCODER_THREADS:-4}
+      WAITING_IMAGE: ${WAITING_IMAGE:-/assets/waiting.png}
+      OVERLAY_IMAGE: ${OVERLAY_IMAGE:-/assets/overlay.png}
+      STALE_SECONDS: ${STALE_SECONDS:-1.5}
+      READY_FRAMES: ${READY_FRAMES:-5}
+      OUTPUT_STALL_SECONDS: ${OUTPUT_STALL_SECONDS:-20}
+    volumes:
+      - type: bind
+        source: ${ASSETS_DIR:-./assets}
+        target: /assets
+        read_only: true
+    networks: [stream]
+    read_only: true
+    tmpfs: ["/tmp:size=32m,mode=1777"]
+    mem_limit: 1536m
+    cpus: ${RELAY_CPUS:-5.0}
+    pids_limit: 128
+    stop_grace_period: 15s
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    healthcheck:
+      test: [CMD, python, /app/stream_controller.py, --healthcheck]
+      interval: 15s
+      timeout: 3s
+      start_period: 30s
+      retries: 3
+    logging: *logs
+
+networks:
+  stream:
