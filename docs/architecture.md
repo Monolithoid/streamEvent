@@ -90,7 +90,8 @@ exactement une livraison. Reconstruire et valider régulièrement les correctifs
 ## Extensions
 
 La [console web privée](web-console.md) génère le PNG RGBA dans un volume partagé,
-rechargé par FFmpeg à 1 Hz sans redémarrage. Elle lit le statut JSON du relais
+chargé en arrière-plan uniquement lorsqu’il change, puis transmis en YUVA420P
+à la même cadence que la vidéo sans redémarrage. Elle lit le statut JSON du relais
 et exige une connexion Google avec une liste de comptes autorisés.
 SRT peut remplacer RTMP à l’entrée MediaMTX sans modifier la lecture RTSP.
 Le chronomètre automatique et la prévisualisation vidéo ne sont pas implémentés.

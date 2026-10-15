@@ -192,7 +192,9 @@ dans les logs ou captures d’écran.
 - L’aperçu est généré par le serveur avec le même rendu que l’image publiée.
   Le damier indique la transparence et ne figure pas dans le PNG.
 - Cliquer sur **Valider et diffuser** pour écrire atomiquement le PNG RGBA.
-  FFmpeg relit l’image à une cadence de 1 Hz, sans redémarrer l’encodeur.
+  Un chargeur en arrière-plan détecte les changements du PNG, le décode une fois
+  et met à jour l’image conservée en mémoire, sans redémarrer l’encodeur.
+  Le relais transmet cette image au même rythme que la vidéo (25/30/50/60 ips).
   Prévoir quelques secondes de prise en compte, en plus du délai YouTube.
 - « Télécharger le PNG diffusé » récupère la dernière version validée.
 
@@ -257,9 +259,10 @@ Si le message reste sur « Chargement de l’éditeur », vérifier dans le navi
 que JavaScript et `/static/app.js` sont accessibles et qu’aucune politique CSP
 ajoutée par le proxy ne bloque le script, les requêtes API ou les images `blob:`.
 
-Après validation, la console compare l’empreinte du PNG enregistré à celle du
-fichier que le relais voit à `/data/overlay/overlay.png`. La confirmation indique
-que le fichier est disponible au relais ; elle ne mesure pas son apparition sur
+Après validation, la console compare l’empreinte du PNG enregistré à celle de
+la dernière image décodée avec succès par le relais depuis
+`/data/overlay/overlay.png`. La confirmation indique
+que le fichier a été chargé par le relais ; elle ne mesure pas son apparition sur
 YouTube, qui ajoute son propre délai vidéo.
 
 - Si le relais ne confirme pas le PNG : vérifier le volume partagé `overlay-data`
@@ -274,6 +277,33 @@ YouTube, qui ajoute son propre délai vidéo.
   erreurs de la console du navigateur, puis vérifier les réponses aux requêtes
   `/api/preview` et `/api/overlay` dans l’onglet Réseau.
 
+### Saccades périodiques de la vidéo
+
+Une entrée FFmpeg d’overlay limitée à 1 image/seconde peut bloquer la
+synchronisation du filtre `overlay`, puis libérer plusieurs images vidéo d’un
+coup. Les timestamps peuvent rester parfaitement réguliers dans le fichier
+produit malgré ces pauses dans son émission.
+
+Le relais utilise désormais une entrée YUVA420P non compressée à la même cadence
+que la vidéo principale. Le PNG est décodé par un chargeur indépendant uniquement
+lorsqu’il change ; les images en mémoire sont réutilisées entre les validations.
+Il n’y a plus de lecture/décodage du PNG dans le chemin de chaque image vidéo.
+Le filtre compose directement en YUV420 et l’écriture FLV vide ses paquets sans
+attendre un remplissage de tampon. L’empreinte de l’image est également calculée
+au chargement, hors de la boucle cadencée.
+
+Un PNG absent ou invalide pendant une mise à jour conserve le dernier overlay
+valide et produit le message `overlay_reload_failed keeping_previous_image`.
+Une nouvelle image valide est prise en compte automatiquement. Au tout premier
+démarrage, un overlay valide reste nécessaire.
+
+Pour appliquer ce changement, reconstruire/publier l’image du relais puis
+recréer `relay` avec cette version. Aucun nouveau paramètre d’environnement n’est
+nécessaire ; la recréation coupe temporairement la connexion de sortie. Les
+limites CPU/mémoire du relais continuent à s’appliquer : cette correction traite
+les pauses de synchronisation de l’overlay et ne remplace pas le dimensionnement
+de l’encodage.
+
 ## Vérifications locales
 
 ```sh
@@ -285,7 +315,9 @@ docker compose --env-file .env.example -f docker-compose.rtmps.yml config --quie
 ```
 
 FFmpeg et la police DejaVu Sans Bold sont nécessaires aux tests du rendu et du
-rechargement. Le test de l’encodeur enregistre réellement un FLV, remplace le PNG
-pendant l’encodage puis vérifie les couleurs et la transparence des images décodées.
+rechargement. Le test de l’encodeur enregistre réellement un FLV, publie un nouveau PNG via
+la console pendant l’encodage, puis vérifie les couleurs, la transparence des
+images décodées et l’espacement réel entre les paquets vidéo reçus. Les timestamps
+du fichier seuls ne permettent pas de détecter les émissions vidéo par à-coups.
 Les tests Google simulent le retour OAuth ; une connexion Google réelle nécessite
 le client OAuth et le domaine HTTPS du déploiement.
