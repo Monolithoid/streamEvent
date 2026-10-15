@@ -90,14 +90,16 @@ déploiement, les variables à renseigner, les montages persistants et les contr
    `/docker-compose.yml`. Ne pas sélectionner Dockerfile/Nixpacks.
 3. Renseigner les variables de `.env.example`, particulièrement `RELAY_IMAGE`, les
    deux comptes MediaMTX et les paramètres YouTube. Les secrets sont stockés dans Coolify.
-4. `config/mediamtx.yml` et `assets/*.png` sont fournis par Git et montés en lecture
-   seule. Pour conserver les images indépendamment des redéploiements, les placer
-   sur le VPS, par exemple `/opt/basket-live/assets`, et définir
-   `ASSETS_DIR=/opt/basket-live/assets`. Dossier et fichiers doivent déjà exister et
+4. Copier `config/mediamtx.yml` dans `/opt/basket-live/config/mediamtx.yml` sur le
+   VPS et définir `MEDIAMTX_CONFIG` avec ce chemin absolu dans Coolify. Ce chemin
+   persistant est aussi la valeur par défaut du Compose. Pour conserver les images
+   indépendamment des redéploiements, les placer sur le VPS, par exemple
+   `/opt/basket-live/assets`, et définir `ASSETS_DIR=/opt/basket-live/assets`.
+   Dossier et fichiers doivent déjà exister et
    être traversables/lisibles par l’UID 10001, par exemple permissions `755`/`644`.
 5. Dans les volumes Coolify, vérifier que `/mediamtx.yml` pointe vers le fichier
-   du dépôt et `/assets` vers le bon dossier. Un fichier manquant ne doit pas
-   devenir un dossier vide.
+   persistant du VPS et `/assets` vers le bon dossier. Le montage MediaMTX refuse
+   un chemin absent au lieu de créer un dossier vide.
 6. Ouvrir `1935/TCP` dans le pare-feu OVH et celui du VPS, puis déployer.
 7. Vérifier les logs et la prévisualisation YouTube Studio.
 
@@ -106,8 +108,10 @@ RTMP doit être libre ; `RTMP_PORT` permet de le changer. Aucun réseau host, so
 Docker ou privilège étendu. Les limites initiales sont 5 CPU/1,5 Go pour le relais
 et 1 CPU/512 Mo pour MediaMTX ; ajuster après mesure avec les autres services.
 
-Un fichier MediaMTX personnalisé persistant peut remplacer le bind mount Git dans
-Coolify. Les comptes restent configurés par `MTX_AUTHINTERNALUSERS`, issu des variables.
+`MEDIAMTX_CONFIG` désigne un fichier sur le serveur Docker, pas un chemin dans le
+conteneur ni un nom de volume Docker. En local, `.env.example` utilise le fichier
+Git `./config/mediamtx.yml`. Les comptes restent configurés par
+`MTX_AUTHINTERNALUSERS`, issu des variables.
 
 ## YouTube et gestion des sessions
 
