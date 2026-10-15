@@ -118,7 +118,8 @@ Compose : aucune variable dédiée ne permet de les changer actuellement.
 | `MEDIAMTX_CONFIG` | `/opt/basket-live/config/mediamtx.yml` | Chemin absolu du fichier sur le VPS, monté dans `mediamtx` à `/mediamtx.yml`. Valeur par défaut du Compose ; remplacer la valeur locale de `.env.example` dans Coolify. |
 | `ASSETS_DIR` | `/opt/basket-live/assets` | Chemin absolu du dossier sur le VPS, monté dans `relay` à `/assets`. La valeur du dépôt `./assets` utilise les fichiers Git. |
 | `WAITING_IMAGE` | `/assets/waiting.png` | Chemin dans le conteneur, jamais le chemin `/opt/...` du VPS. |
-| `OVERLAY_IMAGE` | `/assets/overlay.png` | Chemin dans le conteneur vers un PNG transparent. |
+| `OVERLAY_IMAGE` | `/data/overlay/overlay.png` | PNG généré par `web` et lu en direct par `relay`. Ne pas utiliser `/assets/overlay.png` ici. |
+| `OVERLAY_BASE_IMAGE` | `/assets/overlay.png` | Image statique transparente utilisée comme base du rendu par `web`. |
 | `STALE_SECONDS` | `1.5` | Âge maximal en secondes de la dernière image avant passage en attente, de `0.2` à `10`. |
 | `READY_FRAMES` | `5` | Nombre d'images reçues avant passage au direct, de `1` à `120`. |
 | `OUTPUT_STALL_SECONDS` | `20` | Délai sans progression de l'encodeur avant sa relance, de `5` à `120` secondes. |

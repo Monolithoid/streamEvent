@@ -196,7 +196,7 @@ dans les logs ou captures d’écran.
   Prévoir quelques secondes de prise en compte, en plus du délai YouTube.
 - « Télécharger le PNG diffusé » récupère la dernière version validée.
 
-L’image d’origine `OVERLAY_IMAGE` (par défaut `/assets/overlay.png`) sert de base
+L’image d’origine `OVERLAY_BASE_IMAGE` (par défaut `/assets/overlay.png`) sert de base
 au rendu, en haut à gauche sans redimensionnement (les parties hors cadre sont coupées). Pour un overlay entièrement vide en dehors des textes, fournir une
 image RGBA transparente. Les zones s’ajoutent par-dessus cette base. Pour changer
 la base ou les dimensions : adapter les variables/le fichier, puis redémarrer
@@ -224,6 +224,30 @@ d’une API privée distincte.
 YouTube a rendu la vidéo publique. Il n’y a pas de lecteur vidéo dans la console.
 
 ## Si l’overlay semble ne pas changer
+
+### Migration de l’ancienne variable OVERLAY_IMAGE
+
+Si Coolify contient encore `OVERLAY_IMAGE=/assets/overlay.png`, le relais peut
+continuer à diffuser l’image fixe malgré les validations de la console.
+Utiliser deux variables distinctes :
+
+```dotenv
+OVERLAY_IMAGE=/data/overlay/overlay.png
+OVERLAY_BASE_IMAGE=/assets/overlay.png
+```
+
+`OVERLAY_IMAGE` désigne le PNG généré dans le volume partagé, destiné au relais.
+`OVERLAY_BASE_IMAGE` désigne uniquement le calque statique chargé par `web`.
+La configuration Compose de `web` lit désormais `OVERLAY_BASE_IMAGE` directement,
+sans réutiliser `OVERLAY_IMAGE` comme nom de variable pour la base.
+
+Modifier les variables dans Coolify puis recréer/redéployer **web et relay**
+pour appliquer leur environnement. Cette opération peut interrompre la sortie
+YouTube. Après redéploiement, vérifier la valeur effective de `OVERLAY_IMAGE`
+dans `relay`, puis modifier un score et valider. Ne pas modifier le contenu de
+`/assets/overlay.png` pour chaque score et conserver le volume `overlay-data`.
+
+### Contrôler l’aperçu et la réception du PNG
 
 L’éditeur affiche « Éditeur prêt » après son chargement. À chaque modification,
 le message devient « Aperçu actualisé » une fois le nouveau PNG reçu. Les erreurs

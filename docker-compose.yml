@@ -106,7 +106,7 @@ services:
       PUBLISH_PASSWORD: ${PUBLISH_PASSWORD:?Set PUBLISH_PASSWORD}
       WIDTH: ${WIDTH:-1920}
       HEIGHT: ${HEIGHT:-1080}
-      OVERLAY_BASE_IMAGE: ${OVERLAY_IMAGE:-/assets/overlay.png}
+      OVERLAY_BASE_IMAGE: ${OVERLAY_BASE_IMAGE:-/assets/overlay.png}
     volumes:
       - overlay-data:/data/overlay
       - relay-status:/data/status:ro

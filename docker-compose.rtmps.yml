@@ -118,7 +118,7 @@ services:
       INGEST_STREAM_KEY: ${INGEST_STREAM_KEY:?Set INGEST_STREAM_KEY}
       WIDTH: ${WIDTH:-1920}
       HEIGHT: ${HEIGHT:-1080}
-      OVERLAY_BASE_IMAGE: ${OVERLAY_IMAGE:-/assets/overlay.png}
+      OVERLAY_BASE_IMAGE: ${OVERLAY_BASE_IMAGE:-/assets/overlay.png}
     volumes:
       - overlay-data:/data/overlay
       - relay-status:/data/status:ro
