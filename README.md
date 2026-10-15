@@ -165,7 +165,8 @@ jamais utiliser la clé YouTube ou un mot de passe réutilisé ailleurs sur le t
 ## Entrée RTMPS pour Streamcaster
 
 La variante autonome [`docker-compose.rtmps.yml`](docker-compose.rtmps.yml)
-permet de publier sans identifiants sur `live`, avec chiffrement TLS et lecture
+permet de publier sans identifiant/mot de passe avec une clé secrète
+`INGEST_STREAM_KEY`, avec chiffrement TLS et lecture
 interne du relais authentifiée. Elle exige un certificat valide monté depuis le
 VPS ; le certificat HTTPS du proxy Coolify n'est pas automatiquement disponible.
 Voir le [guide RTMPS, certificats et renouvellement](docs/rtmps.md).

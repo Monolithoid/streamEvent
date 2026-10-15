@@ -1,13 +1,24 @@
 # Streamcaster → MediaMTX en RTMPS
 
 Le fichier `docker-compose.rtmps.yml` est une alternative autonome au Compose
-RTMP. Il publie uniquement RTMPS sur TCP 1936 par défaut, avec publication anonyme
-sur le chemin `live`. La lecture RTSP du relais reste privée et authentifiée.
+RTMP. Il publie uniquement RTMPS sur TCP 1936 par défaut, avec une clé secrète
+`INGEST_STREAM_KEY` comme chemin de publication. La lecture RTSP du relais
+utilise le même chemin et reste privée et authentifiée.
 Le relais et sa sortie YouTube sont identiques à ceux du Compose RTMP.
 
 TLS chiffre la connexion et permet au téléphone de vérifier le serveur. Le compte
-`any` autorise toute personne qui atteint ce port à publier sur `live` ; TLS
-n'authentifie pas l'émetteur. `overridePublisher: no` reste activé.
+`any` autorise la publication uniquement sur le chemin exact défini par cette clé ;
+`live` et les autres clés sont refusés. La connaissance de la clé donne accès à
+la publication, comme une clé de stream YouTube. TLS seul n'authentifie pas
+l'émetteur. `overridePublisher: no` reste activé.
+
+Générer une clé avec `openssl rand -hex 32`, puis enregistrer sa valeur dans
+`INGEST_STREAM_KEY` dans Coolify (ou dans le fichier `.env`). Utiliser uniquement
+les 64 caractères hexadécimaux générés, sans `/`, `?` ou préfixe `~`. Garder une
+clé distincte de `YOUTUBE_STREAM_KEY` pour pouvoir les renouveler séparément.
+Ne pas enregistrer la vraie clé dans Git. Les logs MediaMTX peuvent contenir le
+chemin : les traiter comme confidentiels. Pour changer la clé, modifier la variable,
+redéployer les deux services et mettre à jour Streamcaster.
 
 ## Let’s Encrypt automatique avec OVH
 
@@ -120,7 +131,8 @@ existant ne devient pas automatiquement renouvelable par l'installation du plugi
 3. Conserver `MEDIAMTX_CONFIG` vers le fichier persistant du VPS, qui doit garder
    `authMethod: internal` et `authInternalUsers: []`, puis les variables du relais, notamment `RELAY_IMAGE`, `READ_USER`,
    `READ_PASSWORD`, `YOUTUBE_STREAM_KEY` et les paramètres des images/vidéo.
-4. Ajouter `RTMPS_CERTS_DIR=/opt/basket-live/certs`. Facultativement, définir
+4. Ajouter `INGEST_STREAM_KEY` avec la clé générée ci-dessus (obligatoire, sans
+   valeur par défaut `live`) et `RTMPS_CERTS_DIR=/opt/basket-live/certs`. Facultativement, définir
    `RTMPS_BIND_IP=0.0.0.0` et `RTMPS_PORT=1936`.
 5. Supprimer l'ancienne variable JSON `MTX_AUTHINTERNALUSERS` et toute variable
    numérotée d'authentification définie séparément qui contredirait le Compose.
@@ -145,7 +157,7 @@ docker compose --env-file .env -f docker-compose.rtmps.yml up -d
 
 ```text
 Serveur : rtmps://ingest.monolithoid.com:1936
-Clé : live
+Clé : valeur de INGEST_STREAM_KEY
 Authentification : désactivée
 ```
 
@@ -162,3 +174,4 @@ Une connexion réussie avec `Verify return code: 0 (ok)` valide la chaîne et le
 selon les autorités de confiance du poste de test. Elle ne valide pas la publication
 RTMP : lancer ensuite Streamcaster et vérifier le passage à `live` dans les logs
 du relais et l'image dans YouTube Studio. Garder `logLevel: info` en exploitation.
+Vérifier aussi qu'une publication avec la clé `live` ou une clé erronée est refusée.
