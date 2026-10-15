@@ -63,7 +63,8 @@ ne pas leur donner la clé YouTube de production : une prévisualisation peut
 n'est requis.
 
 Les valeurs ci-dessous sont celles du Compose et de `.env.example`, sauf
-`ASSETS_DIR` qui propose ici un chemin persistant absolu sur le VPS. Remplacer
+`ASSETS_DIR` et `MEDIAMTX_CONFIG` qui utilisent ici des chemins persistants absolus
+sur le VPS. Remplacer
 tous les exemples de secrets. Pour les deux comptes MediaMTX, utiliser uniquement
 lettres, chiffres, tirets et underscores : leurs valeurs sont interpolées dans
 du JSON. Ne pas utiliser `any` comme nom d'utilisateur.
@@ -109,6 +110,7 @@ Compose : aucune variable dédiée ne permet de les changer actuellement.
 
 | Variable | Valeur initiale recommandée | Rôle / valeurs acceptées |
 | --- | --- | --- |
+| `MEDIAMTX_CONFIG` | `/opt/basket-live/config/mediamtx.yml` | Chemin absolu du fichier sur le VPS, monté dans `mediamtx` à `/mediamtx.yml`. Valeur par défaut du Compose ; remplacer la valeur locale de `.env.example` dans Coolify. |
 | `ASSETS_DIR` | `/opt/basket-live/assets` | Chemin absolu du dossier sur le VPS, monté dans `relay` à `/assets`. La valeur du dépôt `./assets` utilise les fichiers Git. |
 | `WAITING_IMAGE` | `/assets/waiting.png` | Chemin dans le conteneur, jamais le chemin `/opt/...` du VPS. |
 | `OVERLAY_IMAGE` | `/assets/overlay.png` | Chemin dans le conteneur vers un PNG transparent. |
@@ -125,17 +127,16 @@ par le Compose de production.
 
 L'application ne contient ni base de données, ni enregistrement vidéo, ni état
 de session à conserver sur disque. Les fichiers à conserver sont les images et,
-si vous la personnalisez hors Git, la configuration MediaMTX. Un volume ne
+la configuration MediaMTX copiée sur le VPS. Un volume ne
 permet pas de préserver la connexion YouTube lors d'un redémarrage.
 
 | Service | Source sur le VPS | Destination dans le conteneur | Mode | Configuration |
 | --- | --- | --- | --- | --- |
 | `relay` | `/opt/basket-live/assets` | `/assets` | Bind mount, lecture seule | Définir `ASSETS_DIR=/opt/basket-live/assets` ; montage déjà déclaré dans le Compose. |
-| `mediamtx` | `./config/mediamtx.yml`, relatif au dépôt déployé | `/mediamtx.yml` | Bind mount de fichier, lecture seule | Montage déjà déclaré ; la configuration est conservée et versionnée dans Git. |
-| `mediamtx`, variante facultative | `/opt/basket-live/config/mediamtx.yml` | `/mediamtx.yml` | Bind mount de fichier, lecture seule | Remplacer la source du montage existant par ce chemin absolu dans la configuration Compose déployée. |
+| `mediamtx` | `/opt/basket-live/config/mediamtx.yml` | `/mediamtx.yml` | Bind mount de fichier, lecture seule | Définir `MEDIAMTX_CONFIG` avec le chemin du fichier persistant existant ; valeur par défaut du Compose. |
 
-Pour le déploiement recommandé, seul le dossier des images est à créer en dehors
-du répertoire Git de Coolify. Ne pas monter un volume nommé vide à `/assets` :
+Pour le déploiement recommandé, créer le dossier des images et le fichier de
+configuration en dehors du répertoire Git de Coolify. Ne pas monter un volume nommé vide à `/assets` :
 les deux PNG doivent être présents dès le démarrage. Ne pas créer de volume
 persistant à `/tmp` : le Compose y prévoit un `tmpfs` de 32 Mio pour les fichiers
 temporaires et le heartbeat. Les journaux sont sur stdout/stderr, avec une rotation
@@ -171,39 +172,49 @@ Docker, pas seulement sur la machine qui héberge l'interface Coolify. Après un
 changement d'image PNG, redémarrer le relais : l'attente est préchargée et l'overlay
 est ouvert au démarrage de l'encodeur. Cette opération coupe la connexion RTMPS.
 
-### Variante : configuration MediaMTX indépendante de Git
+### Préparer la configuration MediaMTX persistante
 
-La configuration fournie par Git suffit au déploiement standard. Pour la gérer
-sur le VPS, créer d'abord le fichier :
+Sur le VPS cible, depuis une copie du dépôt, copier la configuration initiale
+uniquement si vous n'avez pas déjà votre fichier personnalisé :
 
 ```sh
 sudo install -d -m 0755 /opt/basket-live/config
-sudo install -m 0644 config/mediamtx.yml /opt/basket-live/config/mediamtx.yml
+sudo test -e /opt/basket-live/config/mediamtx.yml || sudo install -m 0644 config/mediamtx.yml /opt/basket-live/config/mediamtx.yml
+sudo test -f /opt/basket-live/config/mediamtx.yml
 ```
 
-Remplacer ensuite le montage existant de `mediamtx` dans le Compose déployé
-(dans votre fork ou l'éditeur Compose Coolify si disponible) :
+Dans Coolify, définir `MEDIAMTX_CONFIG=/opt/basket-live/config/mediamtx.yml`, ou le
+chemin absolu de votre fichier persistant existant. Le Compose utilise cette
+variable directement ; aucune modification du YAML n'est nécessaire :
 
 ```yaml
 volumes:
   - type: bind
-    source: /opt/basket-live/config/mediamtx.yml
+    source: ${MEDIAMTX_CONFIG:-/opt/basket-live/config/mediamtx.yml}
     target: /mediamtx.yml
     read_only: true
+    bind:
+      create_host_path: false
 ```
 
-Il s'agit d'un fichier, pas d'un dossier. Ne pas conserver en parallèle l'ancien
-montage à la même destination. Il n'existe pas de variable `MEDIAMTX_CONFIG` dans
-le Compose actuel : ajouter une telle variable dans Coolify ne change pas ce
-montage. Garder l'authentification via `MTX_AUTHINTERNALUSERS` et les variables
-Coolify, sans ajouter les vrais mots de passe dans le YAML. Redéployer après une
-modification de configuration et vérifier que les mises à jour depuis Git
-conservent le montage souhaité.
+La source est un fichier sur le serveur Docker, pas un dossier ni un nom de
+volume Docker. `create_host_path: false` empêche Docker de créer un répertoire
+si ce fichier manque. Si une tentative précédente a créé un dossier à cet
+emplacement, l'inspecter et utiliser `rmdir` seulement s'il est vide, puis créer
+le fichier. Ne pas ajouter un second montage Coolify sur `/mediamtx.yml`.
+Un volume nommé est un dossier : le monter directement à `/mediamtx.yml` produit
+une incompatibilité dossier/fichier.
+
+Pour un lancement local avec le fichier Git, `.env.example` définit
+`MEDIAMTX_CONFIG=./config/mediamtx.yml`. Un chemin relatif est résolu sur l'hôte
+par rapport au fichier Compose, jamais dans le conteneur. Pour Coolify, utiliser
+le chemin absolu persistant ci-dessus. Garder l'authentification via
+`MTX_AUTHINTERNALUSERS`, sans vrais mots de passe dans le YAML. Redéployer après
+une modification du fichier ; une mise à jour Git ne remplace pas cette copie.
 
 ### Sauvegardes
 
-Sauvegarder `/opt/basket-live/assets`, le dossier `config` si cette variante est
-utilisée, ainsi que la configuration et les secrets Coolify selon votre procédure
+Sauvegarder `/opt/basket-live/assets`, le fichier indiqué par `MEDIAMTX_CONFIG`, ainsi que la configuration et les secrets Coolify selon votre procédure
 de sauvegarde. Conserver une copie hors du VPS : un bind mount survit aux
 redéploiements mais pas à la perte du disque. Conserver aussi la référence exacte
 de `RELAY_IMAGE`. Lors d'une restauration, remettre les fichiers et leurs droits
@@ -252,7 +263,7 @@ rouvre pas automatiquement.
 | `Set ...` pendant la résolution Compose | Variable obligatoire absente ou vide dans l'environnement de production Coolify. |
 | Image introuvable / accès refusé | Image publiée, référence `RELAY_IMAGE` exacte et accès Docker Hub configuré si privé. |
 | Échec de lecture des PNG | `ASSETS_DIR` absolu sur le bon VPS, deux fichiers présents, noms et droits corrects ; chemins `/assets/...` dans le conteneur. |
-| MediaMTX refuse `/mediamtx.yml` | Source existante de type fichier ; aucun montage concurrent sur cette destination. |
+| MediaMTX refuse `/mediamtx.yml` | `MEDIAMTX_CONFIG` doit désigner un fichier existant sur le VPS ; aucun montage concurrent sur cette destination. |
 | Téléphone refusé ou inaccessible | IP/port, pare-feu, compte de publication, chemin `live` ; un autre téléphone ne doit pas déjà publier sur ce chemin. |
 | Match reçu mais absent sur YouTube | Logs du relais, clé et URL RTMPS, accès sortant, état de l'événement Studio. |
 | `output_lost` ou relais malsain | Connexion sortante, progression de l'encodeur et ressources disponibles ; les volumes ne corrigent pas ces ruptures. |
