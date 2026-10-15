@@ -3,6 +3,7 @@
 import collections
 import dataclasses
 import json
+import hashlib
 import logging
 import os
 from pathlib import Path
@@ -348,6 +349,10 @@ def write_status(cfg, state, output, started):
         "width": cfg.width, "height": cfg.height, "fps": cfg.fps,
         "video_bitrate": cfg.bitrate, "uptime_seconds": int(now - started),
     }
+    try:
+        payload["overlay_sha256"] = hashlib.sha256(Path(cfg.overlay).read_bytes()).hexdigest()
+    except OSError:
+        payload["overlay_sha256"] = None
     path = Path(destination)
     try:
         temporary = path.with_suffix(".tmp")

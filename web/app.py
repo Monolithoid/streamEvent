@@ -1,5 +1,6 @@
 """Private overlay console. The relay only reads the atomically replaced PNG."""
 import hmac
+import hashlib
 import io
 import json
 import os
@@ -79,6 +80,12 @@ def create_app(settings=None):
         WEB_PUBLIC_URL=os.getenv('WEB_PUBLIC_URL', '').rstrip('/'),
         ALLOWED_EMAILS=os.getenv('GOOGLE_ALLOWED_EMAILS', ''),
         AUTH_CONFIGURED=bool(os.getenv('WEB_SECRET_KEY')),
+        INGEST_PUBLIC_URL=os.getenv('INGEST_PUBLIC_URL', '').rstrip('/'),
+        INGEST_PROTOCOL=os.getenv('INGEST_PROTOCOL', 'rtmp'),
+        INGEST_PORT=os.getenv('INGEST_PORT', '1935'),
+        INGEST_STREAM_KEY=os.getenv('INGEST_STREAM_KEY', 'live'),
+        PUBLISH_USER=os.getenv('PUBLISH_USER', ''),
+        PUBLISH_PASSWORD=os.getenv('PUBLISH_PASSWORD', ''),
         DATA_DIR=os.getenv('OVERLAY_DATA_DIR', '/data/overlay'),
         BASE_IMAGE=os.getenv('OVERLAY_BASE_IMAGE', '/assets/overlay.png'),
         STATUS_FILE=os.getenv('RELAY_STATUS_FILE', '/data/status/relay.json'),
@@ -168,13 +175,15 @@ def create_app(settings=None):
 
     @app.get('/')
     def index():
-        return render_template('index.html', email=session['email'], csrf=session['csrf'])
+        assets = Path(app.static_folder)
+        version = hashlib.sha256((assets / 'app.js').read_bytes() + (assets / 'style.css').read_bytes()).hexdigest()[:12]
+        return render_template('index.html', email=session['email'], csrf=session['csrf'], asset_version=version)
 
     @app.get('/api/overlay')
     def overlay():
         with lock:
             state = json.loads(state_file.read_text())
-        return dict(state, width=cfg['WIDTH'], height=cfg['HEIGHT'])
+            return dict(state, width=cfg['WIDTH'], height=cfg['HEIGHT'], sha256=hashlib.sha256(png.read_bytes()).hexdigest())
 
     @app.get('/api/overlay.png')
     def image():
@@ -198,7 +207,34 @@ def create_app(settings=None):
             cleaned.update(revision=current['revision'] + 1, updated_at=time.time())
             atomic_write(png, content)
             atomic_write(state_file, json.dumps(cleaned, ensure_ascii=False).encode())
-        return cleaned
+        return dict(cleaned, sha256=hashlib.sha256(content).hexdigest())
+
+    @app.get('/api/ingest')
+    def ingest():
+        # Only publisher credentials are passed to web; never the YouTube key.
+        protocol = cfg['INGEST_PROTOCOL']
+        if protocol not in ('rtmp', 'rtmps'):
+            return jsonify(error='Protocole de réception invalide.'), 503
+        server = cfg['INGEST_PUBLIC_URL']
+        if not server:
+            host = public.hostname
+            if not host:
+                return jsonify(error='Configurer WEB_PUBLIC_URL ou INGEST_PUBLIC_URL.'), 503
+            if ':' in host:
+                host = '[' + host + ']'
+            server = f"{protocol}://{host}:{cfg['INGEST_PORT']}"
+        try:
+            parts = urlsplit(server)
+            port = parts.port
+        except ValueError:
+            return jsonify(error='URL de réception invalide.'), 503
+        if parts.path not in ('', '/') or parts.scheme != protocol or not parts.hostname or parts.username or parts.password or parts.query or parts.fragment:
+            return jsonify(error='INGEST_PUBLIC_URL doit être une URL de serveur sans identifiants ni clé.'), 503
+        result = {'server_url': server, 'stream_key': cfg['INGEST_STREAM_KEY'],
+                  'authentication': protocol == 'rtmp'}
+        if result['authentication']:
+            result.update(username=cfg['PUBLISH_USER'], password=cfg['PUBLISH_PASSWORD'])
+        return result
 
     @app.get('/api/status')
     def status():

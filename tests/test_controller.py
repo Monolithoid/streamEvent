@@ -64,12 +64,15 @@ class SwitchTests(unittest.TestCase):
                 last_progress = time.monotonic()
                 def alive(self):
                     return True
-            cfg = c.Config(input_url="rtsp://u:secret@host/live", output_url="rtmps://host/key")
+            overlay = Path(directory) / "overlay.png"
+            overlay.write_bytes(b"test-overlay")
+            cfg = c.Config(input_url="rtsp://u:secret@host/live", output_url="rtmps://host/key", overlay=str(overlay))
             with patch.dict(os.environ, {"RELAY_STATUS_FILE": str(path)}):
                 c.write_status(cfg, "live", Encoder(), time.monotonic() - 10)
             payload = c.json.loads(path.read_text())
             self.assertTrue(payload["output_healthy"])
             self.assertEqual(payload["state"], "live")
+            self.assertEqual(payload["overlay_sha256"], c.hashlib.sha256(b"test-overlay").hexdigest())
             self.assertNotIn("secret", path.read_text())
             self.assertNotIn("rtmp", path.read_text())
 

@@ -194,7 +194,8 @@ VIDEO_BITRATE=3500k
 ENCODER_PRESET=veryfast
 ENCODER_THREADS=4
 WAITING_IMAGE=/assets/waiting.png
-OVERLAY_IMAGE=/assets/overlay.png
+OVERLAY_IMAGE=/data/overlay/overlay.png
+OVERLAY_BASE_IMAGE=/assets/overlay.png
 ```
 
 FPS acceptés : 25, 30, 50, 60 ; démarrer à 30. Sortie H.264/YUV420p, GOP de deux
