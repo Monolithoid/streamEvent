@@ -9,9 +9,11 @@ services:
         [{"user":"${PUBLISH_USER:?Set PUBLISH_USER}","pass":"${PUBLISH_PASSWORD:?Set PUBLISH_PASSWORD}","ips":[],"permissions":[{"action":"publish","path":"live"}]},{"user":"${READ_USER:-relay}","pass":"${READ_PASSWORD:?Set READ_PASSWORD}","ips":[],"permissions":[{"action":"read","path":"live"}]}]
     volumes:
       - type: bind
-        source: ./config/mediamtx.yml
+        source: ${MEDIAMTX_CONFIG:-/opt/basket-live/config/mediamtx.yml}
         target: /mediamtx.yml
         read_only: true
+        bind:
+          create_host_path: false
     networks: [stream]
     mem_limit: 512m
     cpus: 1.0
