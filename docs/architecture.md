@@ -82,9 +82,9 @@ publication/lecture sur `live` par comptes distincts, remplacement d’un édite
 actif interdit. Le relais utilise un UID non root, aucune capacité Linux, un
 filesystem en lecture seule et un `/tmp` borné.
 
-La CI construit et teste l’image avant GHCR. Aucun secret de diffusion n’est
+La CI construit et teste l’image avant publication sur Docker Hub. Aucun secret de diffusion n’est
 copié à la construction. Les versions Python/MediaMTX sont fixées, mais les
-paquets Debian de sécurité évoluent entre builds. Le digest GHCR identifie
+paquets Debian de sécurité évoluent entre builds. Le digest Docker Hub identifie
 exactement une livraison. Reconstruire et valider régulièrement les correctifs.
 
 ## Extensions

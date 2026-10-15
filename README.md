@@ -16,7 +16,7 @@ Le Compose de production utilise uniquement `image:`, aucun `build:` :
 | Service | Image | Provenance |
 | --- | --- | --- |
 | Réception | `bluenviron/mediamtx:1.15.3` | Image officielle du projet MediaMTX |
-| Relais | `ghcr.io/monolithoid/streamevent-relay:<version>` | Image de ce projet contenant Python, FFmpeg et le contrôleur |
+| Relais | `monolithoid/streamevent-relay:<version>` | Image de ce projet contenant Python, FFmpeg et le contrôleur |
 
 Le relais est construit **dans GitHub Actions**, pas sur le VPS. Sa base est
 l’image officielle Python ; FFmpeg vient des dépôts Debian avec leurs correctifs
@@ -24,19 +24,29 @@ de sécurité. Aucun GPU, OBS, serveur graphique ni paquet Python tiers n’est 
 Les bibliothèques multimédias du paquet Debian FFmpeg sont incluses dans l’image.
 
 **L’image du relais doit d’abord être publiée.** La présence de ce dépôt ne signifie
-pas qu’un paquet GHCR est déjà disponible.
+pas qu’une image Docker Hub est déjà disponible.
 
-1. Pousser le projet sur `main` dans GitHub et autoriser Actions et la publication
-   de packages pour ce dépôt/organisation.
-2. Le workflow `Test and publish relay` construit et teste le conteneur, puis publie
+1. Créer ou choisir le dépôt **`monolithoid/streamevent-relay`** dans Docker Hub.
+   Créer un jeton d’accès Docker Hub avec les droits de lecture/écriture sur ce
+   dépôt. Ne pas utiliser le mot de passe du compte dans le workflow.
+2. Dans GitHub → Settings → Secrets and variables → Actions, ajouter :
+   - secret `DOCKERHUB_USERNAME` : `monolithoid` ;
+   - secret `DOCKERHUB_TOKEN` : le jeton Docker Hub. Le saisir directement dans
+     GitHub, jamais dans Git, Coolify ou un message de chat.
+   La variable de dépôt `DOCKERHUB_IMAGE` est facultative : elle permet de remplacer
+   la destination par défaut `monolithoid/streamevent-relay`, sans tag ni registre.
+3. Pousser/fusionner sur `main` et autoriser GitHub Actions.
+   Le workflow `Test and publish relay` construit et teste le conteneur, puis publie
    les tags `main` et `sha-<SHA complet>`. Un tag Git `v…` publie le même tag d’image.
-3. Dans GitHub → Packages → package du relais → Package settings, rendre le paquet
-   public pour un téléchargement anonyme. Sinon, configurer l’accès GHCR privé dans
-   Coolify avec un jeton ayant `read:packages`.
-4. Définir `RELAY_IMAGE` avec le tag SHA, une version, ou idéalement le digest indiqué
+   Une destination invalide bloque explicitement la publication.
+4. Rendre le dépôt Docker Hub public pour permettre le téléchargement anonyme.
+   Pour un dépôt privé, configurer dans Coolify un accès à `docker.io` avec un
+   compte/jeton de lecture. Avec Compose local, utiliser `docker login` si nécessaire.
+5. Définir `RELAY_IMAGE` avec le tag SHA, une version, ou idéalement le digest indiqué
    par Actions. `main` est un raccourci mutable pour les premiers essais.
 
-Pour un fork : `ghcr.io/<propriétaire>/<dépôt-en-minuscules>-relay`, généré automatiquement.
+Pour un fork ou un autre dépôt Docker Hub, renseigner `DOCKERHUB_IMAGE` et adapter
+`RELAY_IMAGE` au même `compte/depot`, par exemple `compte/depot:main`.
 Les pull requests construisent/testent sans publier. Cible initiale : Linux amd64.
 
 ## Installation Docker Compose
@@ -54,7 +64,7 @@ openssl rand -hex 24
 ```
 
 Reporter les deux mots de passe différents dans `.env`, remplacer la clé YouTube
-et choisir l’image GHCR publiée. Pour les utilisateurs/mots de passe MediaMTX,
+et choisir l’image Docker Hub publiée. Pour les utilisateurs/mots de passe MediaMTX,
 utiliser uniquement lettres, chiffres, tirets et underscores : ils sont insérés
 dans du JSON par Compose. Ne pas utiliser `any` comme utilisateur.
 
@@ -71,7 +81,7 @@ une clé YouTube ou des captures de configuration. L’attente est émise dès l
 
 ## Déploiement Coolify depuis Git
 
-1. Publier l’image GHCR comme décrit ci-dessus.
+1. Publier l’image Docker Hub comme décrit ci-dessus.
 2. Créer une ressource depuis le dépôt Git, choisir **Docker Compose** avec
    `/docker-compose.yml`. Ne pas sélectionner Dockerfile/Nixpacks.
 3. Renseigner les variables de `.env.example`, particulièrement `RELAY_IMAGE`, les
@@ -202,7 +212,7 @@ python3 -m unittest discover -s tests -v
 docker compose --env-file .env.example config --quiet
 python3 tests/integration.py
 # Tester exactement le conteneur publié, son FFmpeg et son UID non root :
-python3 tests/integration.py --image ghcr.io/monolithoid/streamevent-relay:VOTRE_TAG
+python3 tests/integration.py --image monolithoid/streamevent-relay:VOTRE_TAG
 ```
 
 Les logs et `continuous.flv` restent dans `test-results/`, ignoré par Git. Le test

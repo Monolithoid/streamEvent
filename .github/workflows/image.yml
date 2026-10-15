@@ -9,6 +9,9 @@ on:
 permissions:
   contents: read
 
+env:
+  DOCKERHUB_IMAGE: ${{ vars.DOCKERHUB_IMAGE || 'monolithoid/streamevent-relay' }}
+
 jobs:
   verify:
     runs-on: ubuntu-latest
@@ -26,13 +29,18 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write
     steps:
       - uses: actions/checkout@v4
-      - name: Lowercase image name
-        id: image
+      - name: Validate Docker Hub repository
+        if: github.event_name != 'pull_request'
+        env:
+          IMAGE_REPOSITORY: ${{ env.DOCKERHUB_IMAGE }}
         shell: bash
-        run: echo "name=ghcr.io/${GITHUB_REPOSITORY,,}-relay" >> "$GITHUB_OUTPUT"
+        run: |
+          if [[ ! "$IMAGE_REPOSITORY" =~ ^[a-z0-9][a-z0-9_-]*/[a-z0-9][a-z0-9._-]*$ ]]; then
+            echo '::error::Set the repository variable DOCKERHUB_IMAGE to your Docker Hub namespace/repository, without registry or tag.'
+            exit 1
+          fi
       - uses: docker/setup-buildx-action@v3
       - uses: actions/setup-python@v5
         with:
@@ -57,13 +65,14 @@ jobs:
       - uses: docker/login-action@v3
         if: github.event_name != 'pull_request'
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          registry: docker.io
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
       - uses: docker/metadata-action@v5
         id: meta
         with:
-          images: ${{ steps.image.outputs.name }}
+          # Pull requests build/test without needing any registry credentials.
+          images: ${{ env.DOCKERHUB_IMAGE }}
           tags: |
             type=sha,format=long
             type=ref,event=branch

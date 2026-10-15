@@ -6,7 +6,7 @@
 python3 -m unittest discover -s tests -v
 docker compose --env-file .env.example config --quiet
 python3 tests/integration.py
-python3 tests/integration.py --image ghcr.io/monolithoid/streamevent-relay:VOTRE_TAG
+python3 tests/integration.py --image monolithoid/streamevent-relay:VOTRE_TAG
 ```
 
 Le test crée un MediaMTX dédié, une source FFmpeg et un lecteur enregistrant le
@@ -41,7 +41,7 @@ Pour refaire le scénario à la résolution cible (sur une machine suffisamment 
 
 ```sh
 TEST_WIDTH=1920 TEST_HEIGHT=1080 TEST_BITRATE=6000k TEST_PRESET=veryfast TEST_THREADS=4 \
-  python3 tests/integration.py --image ghcr.io/monolithoid/streamevent-relay:VOTRE_TAG
+  python3 tests/integration.py --image monolithoid/streamevent-relay:VOTRE_TAG
 ```
 
 Le test limite le relais à 1,5 Go, 128 processus/threads et au plus cinq CPU,
