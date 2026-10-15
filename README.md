@@ -81,6 +81,10 @@ une clé YouTube ou des captures de configuration. L’attente est émise dès l
 
 ## Déploiement Coolify depuis Git
 
+Le [guide Coolify et stockage VPS](docs/coolify.md) détaille tous les champs de
+déploiement, les variables à renseigner, les montages persistants et les contrôles
+à effectuer avant un match.
+
 1. Publier l’image Docker Hub comme décrit ci-dessus.
 2. Créer une ressource depuis le dépôt Git, choisir **Docker Compose** avec
    `/docker-compose.yml`. Ne pas sélectionner Dockerfile/Nixpacks.
