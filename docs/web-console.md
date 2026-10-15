@@ -33,7 +33,8 @@ comme indiqué dans le [guide RTMPS](rtmps.md) ou le README pour RTMP.
   **1936** pour RTMPS, dans les pare-feu du fournisseur et du VPS. Si Coolify
   utilise la validation ACME HTTP-01 ou la redirection HTTP vers HTTPS, autoriser
   également TCP **80** vers son proxy.
-- Garder le port **8080** privé : il est publié sur `127.0.0.1` par défaut.
+- Garder le port **8080** interne à Docker : `web` le déclare avec `expose`,
+  sans publication sur le VPS. Aucun port hôte n’est réservé pour la console.
   Le port RTSP **8554** reste interne au réseau Docker.
 
 ### Routage HTTPS dans Coolify et certificats
@@ -60,6 +61,41 @@ publication vidéo reste celle du Compose choisi ; la variante RTMPS du dépôt
 exige la clé de flux secrète `INGEST_STREAM_KEY`, sans identifiant/mot de passe
 côté Streamcaster. Le chemin `live` et les clés incorrectes y sont refusés.
 
+### Erreur « Bind for 0.0.0.0:8080 failed: port is already allocated »
+
+Cette erreur signifie qu’un déploiement tente de publier le port 8080 sur le VPS,
+alors qu’un autre conteneur ou processus l’utilise déjà. Le port interne 8080 peut
+être utilisé par plusieurs conteneurs ; le conflit porte sur sa publication hôte.
+
+Pour la console derrière Coolify, conserver uniquement cette déclaration dans
+le service `web`, dans le fichier Compose sélectionné :
+
+```yaml
+expose:
+  - "8080"
+```
+
+Supprimer le bloc `ports` de `web` et tout mapping de port hôte ajouté dans
+Coolify, puis redéployer. Le proxy doit continuer à cibler `web:8080`.
+`WEB_PUBLIC_URL=https://ingest.monolithoid.com` et l’URI de redirection Google
+ne changent pas. Les anciennes variables `WEB_PORT` et `WEB_BIND_IP` ne sont
+plus utilisées. Il n’est pas nécessaire d’arrêter le service qui occupe déjà
+le port 8080 du VPS.
+
+Si un proxy installé directement sur l’hôte doit joindre la console, ajouter
+explicitement un mapping de boucle locale dans une surcharge Compose locale :
+
+```yaml
+services:
+  web:
+    ports:
+      - "127.0.0.1:18080:8080"
+```
+
+Choisir un port hôte libre (ici 18080) et faire pointer ce proxy vers
+`127.0.0.1:18080`. Le port interne et les paramètres OAuth restent inchangés.
+Cette surcharge est inutile pour le proxy Docker de Coolify.
+
 ## Connexion Google et HTTPS
 
 1. Créer un client OAuth **Application Web** dans Google Cloud / Google Auth Platform.
@@ -79,10 +115,9 @@ côté Streamcaster. Le chemin `live` et les clés incorrectes y sont refusés.
    ```
 
 4. Faire pointer un domaine **HTTPS** vers `web:8080` via le reverse proxy de
-   Coolify. Sur un VPS avec un proxy installé sur l’hôte, celui-ci peut utiliser
-   `127.0.0.1:8080`. Le port publié est lié à la boucle locale par défaut ; le
-   proxy Coolify doit partager le réseau Docker du service. Garder les secrets
-   dans les variables protégées, jamais dans Git.
+   Coolify. Le proxy doit partager le réseau Docker du service. Aucun mapping
+   de port hôte n’est nécessaire. Garder les secrets dans les variables
+   protégées, jamais dans Git.
 5. Redéployer puis ouvrir `https://ingest.monolithoid.com` et choisir
    « Continuer avec Google ».
 

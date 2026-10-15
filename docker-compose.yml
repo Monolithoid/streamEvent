@@ -89,8 +89,9 @@ services:
     restart: unless-stopped
     init: true
     entrypoint: [gunicorn, "--bind=0.0.0.0:8080", "--workers=1", "--threads=4", "--timeout=30", "web.app:create_app()"]
-    ports:
-      - "${WEB_BIND_IP:-127.0.0.1}:${WEB_PORT:-8080}:8080"
+    # Coolify routes to the container port; do not reserve a host port.
+    expose:
+      - "8080"
     environment:
       WEB_PUBLIC_URL: ${WEB_PUBLIC_URL:-}
       WEB_SECRET_KEY: ${WEB_SECRET_KEY:-}
