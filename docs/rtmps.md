@@ -9,59 +9,107 @@ TLS chiffre la connexion et permet au téléphone de vérifier le serveur. Le co
 `any` autorise toute personne qui atteint ce port à publier sur `live` ; TLS
 n'authentifie pas l'émetteur. `overridePublisher: no` reste activé.
 
-## Certificat sur le VPS
+## Let’s Encrypt automatique avec OVH
 
 Le nom `ingest.monolithoid.com` doit pointer directement vers le VPS, sans proxy
-HTTP/CDN. Un certificat publiquement reconnu doit couvrir exactement ce nom.
-Utiliser un client ACME, par exemple Certbot, avec renouvellement automatisé.
-Le défi DNS-01 permet l'émission sans modifier le proxy web Coolify ; HTTP-01
-nécessite un routage explicite du défi sur le port 80.
+HTTP/CDN. Le plugin Certbot OVH crée et supprime automatiquement les TXT du défi
+DNS-01. Aucun port HTTP supplémentaire ni arrêt du proxy Coolify n'est nécessaire.
+Le certificat HTTPS du proxy Coolify n'est pas automatiquement fourni à MediaMTX ;
+laisser la rubrique Domains du service MediaMTX vide.
 
-Pour un premier certificat avec validation DNS manuelle sur Debian/Ubuntu :
+Ces commandes s'exécutent sur le **VPS Docker cible**, sous Debian/Ubuntu. Utiliser
+une seule installation de Certbot : si Certbot est déjà installé par Snap ou une
+autre méthode, installer le plugin OVH correspondant plutôt que mélanger les
+installations. Pour une installation par les paquets Debian/Ubuntu :
 
 ```sh
 sudo apt-get update
-sudo apt-get install -y certbot
-sudo certbot certonly --manual --preferred-challenges dns -d ingest.monolithoid.com
+sudo apt-get install -y certbot python3-certbot-dns-ovh openssl
 ```
 
-Créer le TXT `_acme-challenge.ingest.monolithoid.com` avec la valeur affichée,
-attendre sa propagation puis valider dans Certbot. Après émission, les sources
-à copier ci-dessous sont
-`/etc/letsencrypt/live/ingest.monolithoid.com/fullchain.pem` et
-`/etc/letsencrypt/live/ingest.monolithoid.com/privkey.pem`.
-Cette méthode manuelle ne permet pas le renouvellement automatique : pour une
-exploitation durable, utiliser le plugin DNS de son fournisseur et un hook de
-copie/redémarrage. Ne pas supposer que `certbot renew` automatisera un défi manuel.
+### Accès DNS OVH
 
-Le certificat HTTPS géré par le proxy Coolify n'est pas automatiquement fourni à
-MediaMTX. La rubrique Domains de MediaMTX doit rester vide. Ne pas remplacer le
-certificat par un certificat d'origine réservé à un CDN ou un certificat autosigné
-si le téléphone ne lui fait pas explicitement confiance.
+Créer des identifiants API dans le [portail OVH Europe](https://eu.api.ovh.com/createToken/),
+avec des droits limités à la zone `monolithoid.com` :
 
-Préparer sur le serveur Docker cible un dossier, par exemple
-`/opt/basket-live/certs`, avec :
+| Méthode | Chemin |
+| --- | --- |
+| GET | `/domain/zone/` |
+| GET | `/domain/zone/monolithoid.com` |
+| GET | `/domain/zone/monolithoid.com/*` |
+| POST | `/domain/zone/monolithoid.com/record` |
+| POST | `/domain/zone/monolithoid.com/refresh` |
+| DELETE | `/domain/zone/monolithoid.com/record/*` |
 
-- `fullchain.pem` : certificat du domaine et intermédiaires ;
-- `privkey.pem` : clé privée correspondante, jamais dans Git ni dans le chat.
-
-Pour copier des fichiers existants, adapter les deux sources réelles :
+Les autorisations doivent rester valides pour les renouvellements futurs ;
+prévoir leur rotation avant expiration si une durée limitée est choisie.
+Conserver les trois valeurs uniquement sur le VPS, jamais dans Git, Coolify ou
+le chat. Créer le fichier protégé puis l'éditer directement :
 
 ```sh
-sudo install -d -m 0700 /opt/basket-live/certs
-sudo install -m 0644 /CHEMIN_SOURCE/fullchain.pem /opt/basket-live/certs/fullchain.pem
-sudo install -m 0600 /CHEMIN_SOURCE/privkey.pem /opt/basket-live/certs/privkey.pem
+sudo install -d -m 0700 /root/.secrets/certbot
+sudo touch /root/.secrets/certbot/ovh.ini
+sudo chmod 0600 /root/.secrets/certbot/ovh.ini
+sudoedit /root/.secrets/certbot/ovh.ini
 ```
 
-MediaMTX utilise l'utilisateur par défaut de son image ; ne pas rendre la clé
-publique pour contourner un problème de droits. Les copies doivent être de vrais
-fichiers : les liens symboliques Certbot `live/` pointent généralement hors du
-dossier et ne fonctionnent pas dans ce montage isolé.
+Contenu à remplir avec les valeurs OVH :
 
-Le hook de renouvellement ACME doit recopier les deux fichiers puis redémarrer
-uniquement le conteneur MediaMTX. Un renouvellement du certificat du proxy Coolify
-ne met pas ces copies à jour. Le redémarrage coupe brièvement l'entrée ; le relais
-reste lancé et peut afficher l'attente pendant la reconnexion du téléphone.
+```ini
+dns_ovh_endpoint = ovh-eu
+dns_ovh_application_key = VOTRE_APPLICATION_KEY
+dns_ovh_application_secret = VOTRE_APPLICATION_SECRET
+dns_ovh_consumer_key = VOTRE_CONSUMER_KEY
+```
+
+### Émission, copie et renouvellement
+
+Depuis une copie du dépôt sur le VPS, installer le hook fourni avant l'émission :
+
+```sh
+sudo install -d -m 0755 /etc/letsencrypt/renewal-hooks/deploy
+sudo install -m 0755 scripts/deploy_rtmps_certificate.sh \
+  /etc/letsencrypt/renewal-hooks/deploy/streamevent-rtmps
+
+sudo certbot certonly --dns-ovh \
+  --dns-ovh-credentials /root/.secrets/certbot/ovh.ini \
+  --dns-ovh-propagation-seconds 120 \
+  --cert-name ingest.monolithoid.com \
+  -d ingest.monolithoid.com
+```
+
+Certbot utilise Let’s Encrypt. Le certificat public et la clé privée sont stockés
+sous `/etc/letsencrypt/live/ingest.monolithoid.com/`. Le hook copie automatiquement
+les vrais fichiers `fullchain.pem` et `privkey.pem` dans `/opt/basket-live/certs`
+(dossier `0700`, clé `0600`), après vérification du nom et de la correspondance
+certificat/clé. Cela évite de monter des liens symboliques dont les cibles restent
+hors du conteneur. MediaMTX utilise l'utilisateur par défaut de son image.
+
+À chaque renouvellement réussi, le hook recopie les fichiers et redémarre les
+conteneurs MediaMTX qui montent ce dossier précis. Le relais reste lancé ; l'entrée
+est brièvement interrompue et le téléphone doit se reconnecter. Le hook ignore
+les certificats des autres domaines. Pour un autre domaine ou dossier, adapter
+les valeurs par défaut du hook avant son installation et le Compose en conséquence.
+
+Activer le renouvellement périodique et tester le défi DNS avec les paquets apt :
+
+```sh
+sudo systemctl enable --now certbot.timer
+sudo certbot renew --cert-name ingest.monolithoid.com --dry-run
+```
+
+Le test `--dry-run` vérifie le renouvellement sans lancer le hook de déploiement.
+Pour tester aussi la copie et le redémarrage, hors direct :
+
+```sh
+sudo certbot renew --cert-name ingest.monolithoid.com --dry-run --run-deploy-hooks
+```
+
+Certbot exécute alors le hook avec le certificat actif, pas le certificat de test.
+Si un certificat a déjà été émis avec `--manual`, migrer explicitement sa méthode
+de renouvellement vers `dns-ovh` avant de considérer l'automatisation opérationnelle
+(`certbot reconfigure` sur les versions qui le proposent). Un certificat manuel
+existant ne devient pas automatiquement renouvelable par l'installation du plugin.
 
 ## Déploiement Coolify
 
