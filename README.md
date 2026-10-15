@@ -103,8 +103,10 @@ déploiement, les variables à renseigner, les montages persistants et les contr
 6. Ouvrir `1935/TCP` dans le pare-feu OVH et celui du VPS, puis déployer.
 7. Vérifier les logs et la prévisualisation YouTube Studio.
 
-Aucun domaine HTTP, proxy web Coolify ou certificat web n’est nécessaire. Le port
-RTMP doit être libre ; `RTMP_PORT` permet de le changer. Aucun réseau host, socket
+La réception RTMP seule ne nécessite pas de domaine HTTP. Pour la console,
+configurer `https://ingest.monolithoid.com` sur le proxy Coolify vers `web:8080`
+et Google OAuth selon le [guide de la console](docs/web-console.md). Le même
+domaine peut recevoir le flux sur un port distinct. Le port RTMP doit être libre ; `RTMP_PORT` permet de le changer. Aucun réseau host, socket
 Docker ou privilège étendu. Les limites initiales sont 5 CPU/1,5 Go pour le relais
 et 1 CPU/512 Mo pour MediaMTX ; ajuster après mesure avec les autres services.
 
@@ -135,7 +137,7 @@ explicitement l’événement dans Studio :
 docker compose stop relay
 # Reprendre ; YouTube peut demander un nouvel événement.
 docker compose start relay
-# Arrêter les deux services sans supprimer les fichiers montés.
+# Arrêter les services sans supprimer les fichiers montés ni les volumes.
 docker compose down
 ```
 
@@ -174,14 +176,15 @@ Voir le [guide RTMPS, certificats et renouvellement](docs/rtmps.md).
 ## Images et paramètres
 
 Les PNG fournis sont des exemples neutres. Remplacer `waiting.png` par une image
-1920×1080 et `overlay.png` par un PNG RGBA transparent. L’overlay est posé en haut
-à gauche sans redimensionnement, sur le match et sur l’attente. Un calque de la
-taille de sortie permet de positionner logo et équipes. Préparer un calque adapté
-à 720p si nécessaire ; éviter qu’il dépasse la taille de sortie.
+1920×1080 et `overlay.png` par un PNG RGBA transparent. La console utilise cet
+overlay comme base en haut à gauche, puis ajoute les zones
+de texte. Le résultat couvre le match et l’attente.
 
 L’attente et la vidéo sont redimensionnées en conservant les proportions.
-Redémarrer le relais après remplacement : l’attente est préchargée et l’overlay
-est ouvert au démarrage de l’encodeur.
+Redémarrer le relais après remplacement de l’attente, qui est préchargée.
+Les zones validées dans la console sont rechargées en direct sans redémarrage.
+Après remplacement du fichier de base `overlay.png`, redémarrer `web` puis
+valider à nouveau les zones pour régénérer l’image diffusée.
 
 ```dotenv
 WIDTH=1280
@@ -291,3 +294,11 @@ Voir [l’architecture](docs/architecture.md). Licence MIT.
 
 Les [résultats locaux](docs/test-report.md) détaillent ce qui a été vérifié et les
 limites des sources synthétiques.
+
+## Console web privée et overlay modifiable
+
+Une console intégrée permet de définir des zones de texte (score, équipes, événement),
+de prévisualiser puis valider un PNG avec canal alpha, rechargé en direct par FFmpeg.
+Elle affiche aussi l’état du relais et exige une connexion Google avec une liste
+de comptes autorisés. Voir [la configuration de la console](docs/web-console.md)
+pour le domaine HTTPS, les variables OAuth et le fonctionnement des volumes persistants.

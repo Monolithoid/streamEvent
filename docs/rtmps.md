@@ -28,6 +28,14 @@ DNS-01. Aucun port HTTP supplémentaire ni arrêt du proxy Coolify n'est nécess
 Le certificat HTTPS du proxy Coolify n'est pas automatiquement fourni à MediaMTX ;
 laisser la rubrique Domains du service MediaMTX vide.
 
+Le même nom peut aussi servir la console sur `https://ingest.monolithoid.com`
+(port 443), tandis que Streamcaster publie sur `rtmps://ingest.monolithoid.com:1936`.
+Associer le domaine HTTPS au service `web` et au port cible 8080 dans Coolify.
+Configurer `WEB_PUBLIC_URL=https://ingest.monolithoid.com` et l’URI Google
+`https://ingest.monolithoid.com/auth/callback` selon le
+[guide complet DNS, proxy et connexion Google](web-console.md). Les certificats
+HTTPS de Coolify et RTMPS de MediaMTX restent gérés séparément.
+
 Ces commandes s'exécutent sur le **VPS Docker cible**, sous Debian/Ubuntu. Utiliser
 une seule installation de Certbot : si Certbot est déjà installé par Snap ou une
 autre méthode, installer le plugin OVH correspondant plutôt que mélanger les
