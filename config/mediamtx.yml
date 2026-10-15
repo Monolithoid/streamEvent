@@ -3,7 +3,8 @@ logDestinations: [stdout]
 readTimeout: 5s
 writeTimeout: 5s
 authMethod: internal
-# Replaced by MTX_AUTHINTERNALUSERS from Compose; never store real secrets here.
+# Populated by indexed MTX_AUTHINTERNALUSERS_* variables from Compose.
+# Keep this list empty; never store real secrets here.
 authInternalUsers: []
 api: no
 metrics: no
@@ -13,6 +14,8 @@ rtsp: yes
 rtspAddress: :8554
 rtspTransports: [tcp]
 rtmp: yes
+# TLS is terminated by the Coolify Traefik TCP router.
+rtmpEncryption: "no"
 rtmpAddress: :1935
 hls: no
 webrtc: no

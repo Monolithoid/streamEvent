@@ -5,14 +5,27 @@
 ```sh
 python3 -m unittest discover -s tests -v
 docker compose --env-file .env.example config --quiet
+python3 tests/rtmps.py
 python3 tests/integration.py
 python3 tests/integration.py --image monolithoid/streamevent-relay:VOTRE_TAG
 ```
 
-Le test crée un MediaMTX dédié, une source FFmpeg et un lecteur enregistrant le
+`tests/rtmps.py` vérifie le Compose et la configuration MediaMTX de production
+avec un proxy Traefik isolé et un certificat temporaire : TLS vérifié côté client,
+rejet d’un mauvais nom d’hôte, publication authentifiée via Traefik et aucun port
+hôte MediaMTX. Le proxy de test utilise le port loopback 19361 et un réseau Docker
+dédié ; le relais ne démarre pas. Les certificats réels Coolify et l’émission ACME
+restent à vérifier sur le VPS. Ne pas lancer deux instances simultanées.
+
+Le test d’intégration crée un MediaMTX dédié, une source FFmpeg et un lecteur enregistrant le
 programme. Avec `--image`, le contrôleur tourne dans l’image candidate, avec son
 UID non root, en lecture seule. Ports loopback 19350/18554, identifiants factices,
 aucun YouTube. Durée : quelques minutes ; ne pas lancer deux instances simultanées.
+
+Ce scénario utilise volontairement RTMP en clair sur loopback dans
+`tests/mediamtx.yml` ; il ne valide pas TLS. En production, vérifier aussi le
+certificat et la publication RTMPS du téléphone suivant le
+[README](../README.md#rtmps-via-le-proxy-traefik-de-coolify).
 
 La capture utilise **une seule connexion de lecture RTMP**, sans reconnexion
 automatique. Cela contrôle la sortie dans le protocole de diffusion, sans ajouter

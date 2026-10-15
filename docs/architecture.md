@@ -13,7 +13,8 @@ ajoute l’overlay et produit une seule sortie H.264/AAC.
 
 ```mermaid
 flowchart LR
-  P[Téléphone] -->|RTMP authentifié| M[MediaMTX]
+  P[Téléphone] -->|RTMPS| T[Traefik Coolify et certificat TLS]
+  T -->|RTMP authentifié sur Docker privé| M[MediaMTX]
   M -->|RTSP TCP privé| D[FFmpeg réception remplaçable]
   D --> V[Dernière image et PCM borné]
   W[Attente et silence] --> C[Horloge et sélection Python]
@@ -77,7 +78,7 @@ Un redéploiement, un redémarrage de conteneur ou une panne réseau n’est pas
 Les échanges bruts restent locaux au conteneur. La limite mémoire et les quotas
 CPU doivent être vérifiés avec les autres applications du VPS.
 
-Un seul port public initial. RTSP TCP sur le réseau Compose, API désactivée,
+Seul Traefik expose le point d’entrée RTMPS ; aucun port hôte MediaMTX. RTSP TCP sur le réseau Compose, API désactivée,
 publication/lecture sur `live` par comptes distincts, remplacement d’un éditeur
 actif interdit. Le relais utilise un UID non root, aucune capacité Linux, un
 filesystem en lecture seule et un `/tmp` borné.
@@ -90,5 +91,5 @@ exactement une livraison. Reconstruire et valider régulièrement les correctifs
 ## Extensions
 
 Un futur overlay dynamique pourra ajouter score/chronomètre avant encodage.
-SRT peut remplacer RTMP à l’entrée MediaMTX sans modifier la lecture RTSP.
+SRT peut remplacer RTMPS à l’entrée MediaMTX sans modifier la lecture RTSP.
 Une interface pourra observer le contrôleur. Ces fonctionnalités sont hors V1.

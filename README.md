@@ -2,7 +2,7 @@
 
 Relais sans interface graphique pour diffuser du basket 3×3 :
 
-**Téléphone → MediaMTX → FFmpeg réception → commutation Python → FFmpeg sortie → YouTube RTMPS.**
+**Téléphone RTMPS → Traefik (TLS) → MediaMTX (RTMP privé) → FFmpeg réception → commutation Python → FFmpeg sortie → YouTube RTMPS.**
 
 Sans téléphone, la sortie continue avec une image d’attente et du silence. Les
 basculements conservent l’encodeur de sortie et sa connexion. Une panne du réseau
@@ -65,8 +65,31 @@ openssl rand -hex 24
 
 Reporter les deux mots de passe différents dans `.env`, remplacer la clé YouTube
 et choisir l’image Docker Hub publiée. Pour les utilisateurs/mots de passe MediaMTX,
-utiliser uniquement lettres, chiffres, tirets et underscores : ils sont insérés
-dans du JSON par Compose. Ne pas utiliser `any` comme utilisateur.
+utiliser uniquement lettres, chiffres, tirets et underscores pour simplifier
+la saisie des URL. Ne pas utiliser `any` comme utilisateur.
+
+### RTMPS via le proxy Traefik de Coolify
+
+Le téléphone envoie du RTMPS à Traefik, qui gère le certificat et son renouvellement.
+Traefik transmet ensuite du RTMP à `mediamtx:1935` sur le réseau Docker du proxy.
+MediaMTX ne monte aucun certificat et ne publie aucun port sur le VPS.
+
+Définir `RTMPS_DOMAIN` avec le domaine DNS du flux, `TRAEFIK_NETWORK` avec le réseau
+existant du proxy (par défaut `coolify`), `RTMPS_ENTRYPOINT` avec son point d’entrée
+TCP (par défaut `rtmps`) et `TRAEFIK_CERT_RESOLVER` avec son résolveur ACME existant
+(par défaut `letsencrypt`). Le Compose déclare le routeur TCP TLS, la règle HostSNI
+et la destination RTMP. Il ne crée pas de second proxy.
+
+Le proxy Coolify doit déjà exposer le point d’entrée TCP correspondant, par exemple
+`--entrypoints.rtmps.address=:1936` et le port Docker `1936:1936/tcp`.
+Voir le [guide Coolify](docs/coolify.md#terminaison-tls-dans-traefik) pour ces réglages.
+Le domaine doit pointer vers le VPS, le téléphone doit envoyer SNI et vérifier le
+certificat. L’émission ACME doit fonctionner avec le résolveur choisi.
+
+Pour migrer, supprimer `RTMPS_CERTS_DIR`, `RTMPS_BIND_IP` et `RTMPS_PORT` des variables
+applicatives, renseigner les quatre variables ci-dessus et configurer le proxy.
+Fermer l’ancien port public MediaMTX ; seul le proxy reçoit les connexions publiques.
+Un redéploiement interrompt le flux entrant : effectuer la migration hors direct.
 
 ```sh
 docker compose config --quiet
@@ -99,19 +122,21 @@ déploiement, les variables à renseigner, les montages persistants et les contr
    être traversables/lisibles par l’UID 10001, par exemple permissions `755`/`644`.
 5. Dans les volumes Coolify, vérifier que `/mediamtx.yml` pointe vers le fichier
    persistant du VPS et `/assets` vers le bon dossier. Le montage MediaMTX refuse
-   un chemin absent au lieu de créer un dossier vide.
-6. Ouvrir `1935/TCP` dans le pare-feu OVH et celui du VPS, puis déployer.
+   un chemin absent au lieu de créer un dossier vide. Vérifier le réseau partagé
+   avec le proxy Traefik.
+6. Configurer le point d’entrée TCP du proxy et ouvrir son port (par exemple
+   `1936/TCP`) dans le pare-feu OVH et celui du VPS, puis déployer.
 7. Vérifier les logs et la prévisualisation YouTube Studio.
 
-Aucun domaine HTTP, proxy web Coolify ou certificat web n’est nécessaire. Le port
-RTMP doit être libre ; `RTMP_PORT` permet de le changer. Aucun réseau host, socket
-Docker ou privilège étendu. Les limites initiales sont 5 CPU/1,5 Go pour le relais
+Le domaine et le certificat sont gérés par Traefik. Aucun domaine HTTP à saisir
+pour cette application : les labels du Compose déclarent le routeur TCP TLS.
+Aucun réseau host, socket Docker ou privilège étendu. Les limites initiales sont 5 CPU/1,5 Go pour le relais
 et 1 CPU/512 Mo pour MediaMTX ; ajuster après mesure avec les autres services.
 
 `MEDIAMTX_CONFIG` désigne un fichier sur le serveur Docker, pas un chemin dans le
 conteneur ni un nom de volume Docker. En local, `.env.example` utilise le fichier
 Git `./config/mediamtx.yml`. Les comptes restent configurés par
-`MTX_AUTHINTERNALUSERS`, issu des variables.
+les variables indexées `MTX_AUTHINTERNALUSERS_*` du Compose.
 
 ## YouTube et gestion des sessions
 
@@ -144,23 +169,24 @@ changer sa configuration coupe la connexion RTMPS.
 
 ## Téléphone Android
 
-Utiliser une application permettant la publication RTMP personnalisée, par exemple
+Utiliser une application permettant la publication RTMPS personnalisée, par exemple
 Larix Broadcaster (vérifier les fonctions et conditions de la version installée).
-Configurer une connexion RTMP :
+Configurer une connexion RTMPS avec vérification du certificat activée :
 
 ```text
-rtmp://ADRESSE_DU_VPS:1935/live?user=phone&pass=VOTRE_MOT_DE_PASSE
+rtmps://stream.votre-domaine.fr:1936/live?user=phone&pass=VOTRE_MOT_DE_PASSE
 ```
 
 Remplacer `phone` par `PUBLISH_USER`. Si l’application sépare serveur et clé :
-serveur `rtmp://ADRESSE_DU_VPS:1935`, clé `live?user=phone&pass=VOTRE_MOT_DE_PASSE`.
+serveur `rtmps://stream.votre-domaine.fr:1936`, clé `live?user=phone&pass=VOTRE_MOT_DE_PASSE`.
 Les champs d’authentification propres à l’application peuvent différer ; cette URL
-utilise le mécanisme MediaMTX vérifié par le test synthétique.
+utilise le mécanisme d’authentification MediaMTX. Remplacer le domaine par celui
+du certificat (`RTMPS_DOMAIN`) et le port par celui du point d’entrée Traefik.
 
 Choisir H.264, AAC, paysage, 1080p30 à environ 6 Mbit/s si le réseau montant le
 permet, sinon 720p30 à 3–4 Mbit/s. Désactiver l’économie de batterie de l’application
-et tester sur le terrain. RTMP ne chiffre ni les identifiants ni la vidéo. Ne
-jamais utiliser la clé YouTube ou un mot de passe réutilisé ailleurs sur le téléphone.
+et tester sur le terrain. RTMPS chiffre les identifiants et la vidéo entre le
+téléphone et Traefik ; le transport vers MediaMTX reste privé sur Docker. Ne jamais utiliser la clé YouTube ou un mot de passe réutilisé ailleurs sur le téléphone.
 
 ## Images et paramètres
 
@@ -193,7 +219,8 @@ y compris lorsque le téléphone n’a pas de piste audio.
 
 | Direction | Port | Usage |
 | --- | --- | --- |
-| Public entrant | TCP 1935 par défaut | Téléphone RTMP |
+| Public entrant sur Traefik | TCP 1936, selon le point d’entrée | Téléphone RTMPS |
+| Docker du proxy | TCP 1935 | Traefik → MediaMTX, aucun port hôte |
 | Docker privé | TCP 8554 | Lecture RTSP du relais |
 | Sortant | TCP 443 | RTMPS YouTube et images HTTPS |
 | Sortant | DNS selon l’hôte | Résolution des noms |
@@ -234,8 +261,9 @@ Source synthétique manuelle pour tester le VPS :
 ffmpeg -re -f lavfi -i 'testsrc2=size=1280x720:rate=30' \
   -re -f lavfi -i 'sine=frequency=880:sample_rate=48000' \
   -c:v libx264 -preset veryfast -tune zerolatency -g 60 \
-  -c:a aac -f flv \
-  'rtmp://ADRESSE_DU_VPS:1935/live?user=phone&pass=MOT_DE_PASSE'
+  -c:a aac -tls_verify 1 -ca_file /etc/ssl/certs/ca-certificates.crt \
+  -verifyhost stream.votre-domaine.fr -f flv \
+  'rtmps://stream.votre-domaine.fr:1936/live?user=phone&pass=MOT_DE_PASSE'
 ```
 
 Ctrl-C simule le départ du téléphone. Sans audio : enlever l’entrée `sine` et

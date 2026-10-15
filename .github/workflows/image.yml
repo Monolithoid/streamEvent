@@ -23,6 +23,8 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - run: python -m unittest discover -s tests -v
       - run: docker compose --env-file .env.example config --quiet
+      - name: Verify RTMPS through Traefik to private MediaMTX
+        run: python tests/rtmps.py
 
   image:
     needs: verify

@@ -2,11 +2,25 @@ services:
   mediamtx:
     image: bluenviron/mediamtx:1.15.3
     restart: unless-stopped
-    ports:
-      - "${RTMP_BIND_IP:-0.0.0.0}:${RTMP_PORT:-1935}:1935/tcp"
+    expose: ["1935"]
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=${TRAEFIK_NETWORK:-coolify}
+      - traefik.tcp.routers.streamevent-rtmps.rule=HostSNI(`${RTMPS_DOMAIN:?Set RTMPS_DOMAIN to your streaming hostname}`)
+      - traefik.tcp.routers.streamevent-rtmps.entrypoints=${RTMPS_ENTRYPOINT:-rtmps}
+      - traefik.tcp.routers.streamevent-rtmps.tls=true
+      - traefik.tcp.routers.streamevent-rtmps.tls.certresolver=${TRAEFIK_CERT_RESOLVER:-letsencrypt}
+      - traefik.tcp.routers.streamevent-rtmps.service=streamevent-rtmp
+      - traefik.tcp.services.streamevent-rtmp.loadbalancer.server.port=1935
     environment:
-      MTX_AUTHINTERNALUSERS: >-
-        [{"user":"${PUBLISH_USER:?Set PUBLISH_USER}","pass":"${PUBLISH_PASSWORD:?Set PUBLISH_PASSWORD}","ips":[],"permissions":[{"action":"publish","path":"live"}]},{"user":"${READ_USER:-relay}","pass":"${READ_PASSWORD:?Set READ_PASSWORD}","ips":[],"permissions":[{"action":"read","path":"live"}]}]
+      MTX_AUTHINTERNALUSERS_0_USER: ${PUBLISH_USER:?Set PUBLISH_USER}
+      MTX_AUTHINTERNALUSERS_0_PASS: ${PUBLISH_PASSWORD:?Set PUBLISH_PASSWORD}
+      MTX_AUTHINTERNALUSERS_0_PERMISSIONS_0_ACTION: publish
+      MTX_AUTHINTERNALUSERS_0_PERMISSIONS_0_PATH: live
+      MTX_AUTHINTERNALUSERS_1_USER: ${READ_USER:-relay}
+      MTX_AUTHINTERNALUSERS_1_PASS: ${READ_PASSWORD:?Set READ_PASSWORD}
+      MTX_AUTHINTERNALUSERS_1_PERMISSIONS_0_ACTION: read
+      MTX_AUTHINTERNALUSERS_1_PERMISSIONS_0_PATH: live
     volumes:
       - type: bind
         source: ${MEDIAMTX_CONFIG:-/opt/basket-live/config/mediamtx.yml}
@@ -14,7 +28,7 @@ services:
         read_only: true
         bind:
           create_host_path: false
-    networks: [stream]
+    networks: [stream, proxy]
     mem_limit: 512m
     cpus: 1.0
     security_opt: [no-new-privileges:true]
@@ -71,3 +85,6 @@ services:
 
 networks:
   stream:
+  proxy:
+    external: true
+    name: ${TRAEFIK_NETWORK:-coolify}

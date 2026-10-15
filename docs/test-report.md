@@ -59,3 +59,19 @@ RTMPS réelle, le maintien d’un événement YouTube, les téléphones et la
 synchronisation labiale sur plusieurs heures restent à valider séparément
 avec [la procédure terrain](validation.md). Le workflow est prêt à construire,
 tester et publier lors du premier push autorisé sur GitHub.
+
+## Entrée RTMPS via Traefik
+
+L’entrée de production utilise désormais Traefik pour terminer TLS, puis RTMP
+sur Docker vers MediaMTX. MediaMTX ne monte aucun certificat et ne publie aucun
+port hôte. Le test `tests/rtmps.py` couvre cette architecture avec un certificat
+temporaire : publication authentifiée réussie, certificat vérifié, mauvais nom
+d’hôte rejeté et absence de port hôte MediaMTX confirmée. Les cinq tests unitaires
+passent également. Le proxy isolé utilise le fournisseur de fichiers avec les
+valeurs des labels TCP de production ; la découverte Docker de Coolify, le
+certificat public, ACME et le téléphone restent à vérifier sur le VPS. Le premier essai de terminaison TLS directement dans MediaMTX a été
+remplacé pour correspondre au déploiement Coolify.
+
+Le contrôle des comptes a révélé que l’ancienne variable `MTX_AUTHINTERNALUSERS`
+contenant du JSON était ignorée par MediaMTX 1.15.3. Le Compose conserve la
+correction avec les variables indexées `MTX_AUTHINTERNALUSERS_0_USER`, etc.

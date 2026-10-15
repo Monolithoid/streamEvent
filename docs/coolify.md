@@ -33,8 +33,8 @@ Créer une application depuis Git dans le projet et l'environnement souhaités.
 | Build Pack / type | **Docker Compose**. |
 | Base Directory | `/` : racine du dépôt. |
 | Docker Compose Location | `/docker-compose.yml`. |
-| Domaines | Laisser vide pour les deux services ; la réception utilise directement le port RTMP du VPS. |
-| Proxy HTTP / port HTTP | Aucun routage HTTP à configurer. Ne pas associer le port RTMP à un domaine HTTP du proxy. |
+| Domaines | Laisser vide pour les deux services ; le routeur TCP TLS est déclaré par les labels du Compose. |
+| Proxy HTTP / port HTTP | Utiliser le routeur TCP Traefik décrit ci-dessous ; ne pas créer de route HTTP pour MediaMTX. |
 | Commandes de build / démarrage | Conserver le comportement Compose ; les images contiennent déjà leurs commandes. |
 | Variables d'environnement | Renseigner les valeurs de la section 3 avant de déployer. |
 | Stockage / Persistent Storage | Vérifier les bind mounts de la section 4 ; ne pas ajouter un second montage sur la même destination. |
@@ -66,8 +66,7 @@ Les valeurs ci-dessous sont celles du Compose et de `.env.example`, sauf
 `ASSETS_DIR` et `MEDIAMTX_CONFIG` qui utilisent ici des chemins persistants absolus
 sur le VPS. Remplacer
 tous les exemples de secrets. Pour les deux comptes MediaMTX, utiliser uniquement
-lettres, chiffres, tirets et underscores : leurs valeurs sont interpolées dans
-du JSON. Ne pas utiliser `any` comme nom d'utilisateur.
+lettres, chiffres, tirets et underscores pour simplifier la saisie des URL. Ne pas utiliser `any` comme nom d'utilisateur.
 
 ### Image, authentification et YouTube
 
@@ -91,8 +90,10 @@ le VPS pour un déploiement piloté par les variables Coolify.
 
 | Variable | Valeur initiale | Rôle / valeurs acceptées |
 | --- | --- | --- |
-| `RTMP_BIND_IP` | `0.0.0.0` | Écoute sur les interfaces du VPS. `127.0.0.1` empêche une connexion directe depuis le téléphone. Une IP précise doit appartenir au VPS. |
-| `RTMP_PORT` | `1935` | Port TCP publié sur le VPS ; doit être libre. Le port du conteneur reste `1935`. |
+| `RTMPS_DOMAIN` | `stream.votre-domaine.fr` | Obligatoire : DNS pointant vers le VPS, règle HostSNI et domaine du certificat Traefik. |
+| `RTMPS_ENTRYPOINT` | `rtmps` | Nom du point d’entrée TCP déjà configuré sur le proxy ; son port est géré dans la configuration du proxy. |
+| `TRAEFIK_NETWORK` | `coolify` | Nom exact du réseau Docker externe partagé avec Traefik. |
+| `TRAEFIK_CERT_RESOLVER` | `letsencrypt` | Nom exact du résolveur ACME existant sur Traefik. |
 | `WIDTH` | `1920` | Largeur de sortie, paire, de 16 à 3840. |
 | `HEIGHT` | `1080` | Hauteur de sortie, paire, de 16 à 2160. |
 | `FPS` | `30` | `25`, `30`, `50` ou `60`. Commencer à 30. |
@@ -119,14 +120,57 @@ Compose : aucune variable dédiée ne permet de les changer actuellement.
 | `OUTPUT_STALL_SECONDS` | `20` | Délai sans progression de l'encodeur avant sa relance, de `5` à `120` secondes. |
 
 Le Compose renseigne lui-même `INPUT_URL=rtsp://mediamtx:8554/live` et construit
-`MTX_AUTHINTERNALUSERS` à partir des deux comptes. Ne pas les saisir séparément
+les variables indexées `MTX_AUTHINTERNALUSERS_*` à partir des deux comptes. Ne pas les saisir séparément
 dans Coolify. `OUTPUT_URL` est réservé aux tests du contrôleur et n'est pas exposé
 par le Compose de production.
+
+### Terminaison TLS dans Traefik
+
+Le chemin attendu est **téléphone → RTMPS → Traefik → RTMP privé → MediaMTX**.
+Le Compose connecte MediaMTX au réseau externe `TRAEFIK_NETWORK`, active les labels
+Traefik et déclare un routeur TCP `streamevent-rtmps` vers le port interne `1935`.
+Il n’expose aucun port MediaMTX sur le VPS et ne monte aucun certificat.
+Les noms de routeur/service sont fixes : pour plusieurs instances sur le même
+proxy, attribuer des noms distincts dans les labels de chaque instance.
+
+Dans la configuration **du proxy du serveur Coolify**, vérifier les éléments
+suivants (les intitulés de l’interface dépendent de la version) :
+
+1. Le proxy utilise Traefik avec son fournisseur Docker et rejoint le réseau
+   indiqué par `TRAEFIK_NETWORK`. Ce réseau doit exister avant le déploiement.
+2. Un point d’entrée TCP porte le nom donné par `RTMPS_ENTRYPOINT`. Exemple de
+   configuration statique du proxy pour un port dédié :
+
+   ```yaml
+   # Ajouter à la définition du proxy existant, en conservant ses autres réglages.
+   command:
+     - --entrypoints.rtmps.address=:1936
+   ports:
+     - "1936:1936/tcp"
+   ```
+
+   Ces lignes complètent les listes existantes ; ne pas remplacer les commandes,
+   ports HTTPS ou réglages ACME du proxy. Appliquer la configuration du proxy
+   hors direct, car son redémarrage peut interrompre les services qui en dépendent.
+3. `TRAEFIK_CERT_RESOLVER` désigne son résolveur ACME existant (souvent
+   `letsencrypt`). Traefik utilise son stockage de certificats et renouvelle le
+   certificat de `RTMPS_DOMAIN`. Conserver les accès nécessaires au challenge
+   ACME choisi (HTTP, TLS ou DNS) ; le port RTMPS seul ne réalise pas ce challenge.
+4. `RTMPS_DOMAIN` pointe vers le VPS. Le téléphone utilise ce nom, envoie SNI et
+   vérifie le certificat. Les labels activent TLS sur le routeur TCP sans
+   `tls.passthrough` ; le backend reste du RTMP en clair sur Docker.
+
+Le port de l’URL du téléphone est celui du point d’entrée, `1936` dans cet exemple.
+Le champ **Domaines** HTTP de l’application reste vide. Aucune extraction de
+`acme.json`, copie de clé privée ou variable `RTMPS_CERTS_DIR` n’est nécessaire.
+Supprimer aussi les anciennes variables `RTMPS_BIND_IP` et `RTMPS_PORT` : les
+ports publics sont désormais gérés par le proxy. Fermer toute ancienne publication
+publique directe du port `1935` ou `1936` de MediaMTX.
 
 ## 4. Volumes et fichiers persistants sur le VPS
 
 L'application ne contient ni base de données, ni enregistrement vidéo, ni état
-de session à conserver sur disque. Les fichiers à conserver sont les images et,
+de session à conserver sur disque. Les fichiers à conserver sont les images et
 la configuration MediaMTX copiée sur le VPS. Un volume ne
 permet pas de préserver la connexion YouTube lors d'un redémarrage.
 
@@ -209,7 +253,7 @@ Pour un lancement local avec le fichier Git, `.env.example` définit
 `MEDIAMTX_CONFIG=./config/mediamtx.yml`. Un chemin relatif est résolu sur l'hôte
 par rapport au fichier Compose, jamais dans le conteneur. Pour Coolify, utiliser
 le chemin absolu persistant ci-dessus. Garder l'authentification via
-`MTX_AUTHINTERNALUSERS`, sans vrais mots de passe dans le YAML. Redéployer après
+les variables indexées `MTX_AUTHINTERNALUSERS_*`, sans vrais mots de passe dans le YAML. Redéployer après
 une modification du fichier ; une mise à jour Git ne remplace pas cette copie.
 
 ### Sauvegardes
@@ -224,7 +268,8 @@ sur le serveur cible avant de déployer.
 
 | Sens | Port | Action |
 | --- | --- | --- |
-| Entrant public | TCP `1935`, ou la valeur de `RTMP_PORT` | Autoriser dans le pare-feu du fournisseur/VPS et le filtrage Docker ; aucune autre application ne doit utiliser ce port. |
+| Entrant public sur Traefik | TCP `1936` pour l’exemple ci-dessous | Autoriser le port du point d’entrée du proxy dans le pare-feu et le publier sur le proxy uniquement. |
+| Réseau Docker du proxy | TCP `1935` sur `mediamtx` | Traefik transmet le RTMP déchiffré ; aucun port hôte MediaMTX. |
 | Interne Docker | TCP `8554` sur `mediamtx` | Conserver privé ; aucun port hôte à ouvrir. |
 | Sortant | TCP `443` | Autoriser le téléchargement des images depuis les registres et la diffusion RTMPS YouTube. |
 | Sortant | DNS selon la configuration du VPS | Permettre la résolution des noms. |
@@ -232,9 +277,9 @@ sur le serveur cible avant de déployer.
 Le filtrage des ports publiés par Docker peut contourner les règles UFW ;
 vérifier aussi le pare-feu du fournisseur (OVH si utilisé) et `DOCKER-USER`.
 Les accès d'administration Coolify/SSH du VPS restent à gérer suivant votre
-installation. Aucun domaine, certificat HTTP ou port UDP supplémentaire n'est
-requis par cette application. RTMP entrant est en clair : le téléphone reçoit
-uniquement son compte de publication, jamais la clé YouTube.
+installation. Traefik gère le certificat TLS et son renouvellement. Le téléphone
+reçoit uniquement son compte, jamais la clé YouTube. Le flux est chiffré jusqu’au
+proxy, puis transmis en RTMP sur le réseau Docker privé.
 
 1. Enregistrer les variables, vérifier les montages et cliquer sur **Deploy**.
 2. Vérifier les logs de téléchargement des deux images, puis les logs des services.
@@ -243,8 +288,9 @@ uniquement son compte de publication, jamais la clé YouTube.
    le Compose), puis vérifier la prévisualisation dans YouTube Studio. Cliquer sur
    « Passer au direct » si le démarrage manuel est activé.
 4. Configurer le téléphone avec
-   `rtmp://ADRESSE_DU_VPS:1935/live?user=phone&pass=MOT_DE_PASSE` en remplaçant
-   le port, l'utilisateur et le mot de passe par vos valeurs. Le chemin reste `live`.
+   `rtmps://stream.votre-domaine.fr:1936/live?user=phone&pass=MOT_DE_PASSE` en remplaçant
+   le domaine, le port, l'utilisateur et le mot de passe par vos valeurs.
+   Garder la vérification du certificat activée dans l’application. Le chemin reste `live`.
 5. Publier puis arrêter la publication du téléphone. Vérifier les transitions
    match/attente dans Studio et les logs `switch state=live` / `switch state=waiting`.
    `output_started` doit rester unique pendant ces transitions normales.
