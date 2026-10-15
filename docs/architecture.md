@@ -89,6 +89,8 @@ exactement une livraison. Reconstruire et valider régulièrement les correctifs
 
 ## Extensions
 
-Un futur overlay dynamique pourra ajouter score/chronomètre avant encodage.
+La [console web privée](web-console.md) génère le PNG RGBA dans un volume partagé,
+rechargé par FFmpeg à 1 Hz sans redémarrage. Elle lit le statut JSON du relais
+et exige une connexion Google avec une liste de comptes autorisés.
 SRT peut remplacer RTMP à l’entrée MediaMTX sans modifier la lecture RTSP.
-Une interface pourra observer le contrôleur. Ces fonctionnalités sont hors V1.
+Le chronomètre automatique et la prévisualisation vidéo ne sont pas implémentés.

@@ -1,11 +1,11 @@
 # Déploiement Coolify et stockage persistant sur le VPS
 
-Ce guide correspond au `docker-compose.yml` de production du dépôt : deux services,
-`mediamtx` et `relay`, sans compilation sur le VPS. Les noms des rubriques Coolify
+Ce guide correspond au `docker-compose.yml` de production du dépôt : trois services,
+`mediamtx`, `relay` et `web`, sans compilation sur le VPS. Les noms des rubriques Coolify
 peuvent varier selon la version installée. Les chemins « hôte » désignent le VPS
 Docker cible, y compris si Coolify est installé sur un autre serveur.
 
-Pour recevoir Streamcaster en **RTMPS avec publication anonyme**, utiliser plutôt
+Pour recevoir Streamcaster en **RTMPS avec clé de flux secrète**, utiliser plutôt
 la variante autonome décrite dans le [guide RTMPS](rtmps.md), qui inclut le montage
 des certificats et le port TCP 1936. Les étapes ci-dessous concernent le Compose
 RTMP avec authentification de publication.
@@ -17,7 +17,7 @@ RTMP avec authentification de publication.
 - Publier l'image `monolithoid/streamevent-relay` suivant la procédure du
   [README](../README.md#images-à-télécharger). Choisir son tag de version, son tag
   `sha-<SHA complet>` ou son digest pour retrouver exactement la même livraison.
-- Prévoir les ressources des deux services en plus de Coolify et des autres
+- Prévoir les ressources des services en plus de Coolify et des autres
   applications : quotas initiaux de 5 CPU et 1 536 Mio pour `relay`, 1 CPU et
   512 Mio pour `mediamtx`. Ce sont des limites, pas une mesure de la capacité
   nécessaire ; valider la charge sur le VPS, notamment en 1080p.
@@ -32,14 +32,14 @@ Créer une application depuis Git dans le projet et l'environnement souhaités.
 
 | Champ / rubrique | Valeur à renseigner |
 | --- | --- |
-| Serveur / destination | Le VPS et la destination Docker qui exécuteront les deux services. |
+| Serveur / destination | Le VPS et la destination Docker qui exécuteront les services. |
 | Dépôt Git | `https://github.com/Monolithoid/streamEvent` ou votre fork ; autoriser l'accès Git si le dépôt est privé. |
 | Branche | `main`, ou la branche contenant le Compose à déployer. |
 | Build Pack / type | **Docker Compose**. |
 | Base Directory | `/` : racine du dépôt. |
 | Docker Compose Location | `/docker-compose.yml`. |
-| Domaines | Laisser vide pour les deux services ; la réception utilise directement le port RTMP du VPS. |
-| Proxy HTTP / port HTTP | Aucun routage HTTP à configurer. Ne pas associer le port RTMP à un domaine HTTP du proxy. |
+| Domaines | Laisser vide pour `mediamtx` et `relay` ; associer `https://ingest.monolithoid.com` au port cible 8080 de `web` (voir [console](web-console.md)). |
+| Proxy HTTP / port HTTP | Router la console vers `web:8080`. Ne pas associer les ports RTMP/RTMPS au proxy HTTP. |
 | Commandes de build / démarrage | Conserver le comportement Compose ; les images contiennent déjà leurs commandes. |
 | Variables d'environnement | Renseigner les valeurs de la section 3 avant de déployer. |
 | Stockage / Persistent Storage | Vérifier les bind mounts de la section 4 ; ne pas ajouter un second montage sur la même destination. |
@@ -164,7 +164,7 @@ sudo ls -l /opt/basket-live/assets/waiting.png /opt/basket-live/assets/overlay.p
 Ces commandes copient les exemples et remplacent les fichiers de même nom :
 sur une installation existante, conserver vos images personnalisées. Utiliser
 une attente en 1920×1080 pour le profil par défaut et un overlay PNG RGBA
-transparent. L'overlay est posé en haut à gauche sans redimensionnement.
+transparent. La console pose cette base en haut à gauche et ajoute les textes.
 
 Le relais fonctionne avec l'UID/GID `10001:10001`. Les droits `0755` sur les
 dossiers et `0644` sur les PNG permettent la lecture sans lui donner de droits
@@ -174,8 +174,13 @@ pas nécessaire de changer le propriétaire en `10001` ni de donner les droits `
 Dans Coolify, vérifier après résolution du Compose que le service `relay` utilise
 bien la source absolue souhaitée. Les fichiers doivent exister sur le serveur
 Docker, pas seulement sur la machine qui héberge l'interface Coolify. Après un
-changement d'image PNG, redémarrer le relais : l'attente est préchargée et l'overlay
-est ouvert au démarrage de l'encodeur. Cette opération coupe la connexion RTMPS.
+changement de l’image d’attente, redémarrer le relais : elle est préchargée. Cette
+opération coupe la connexion RTMPS. Les textes validés dans la console sont
+rechargés sans redémarrage. Après remplacement de la base overlay, redémarrer
+`web` puis valider les zones pour régénérer le PNG partagé.
+
+Le service `web` conserve ce PNG et ses zones dans le volume `overlay-data`.
+Configurer sa connexion Google et le domaine HTTPS selon le [guide de la console](web-console.md).
 
 ### Préparer la configuration MediaMTX persistante
 
@@ -230,15 +235,19 @@ sur le serveur cible avant de déployer.
 | Sens | Port | Action |
 | --- | --- | --- |
 | Entrant public | TCP `1935`, ou la valeur de `RTMP_PORT` | Autoriser dans le pare-feu du fournisseur/VPS et le filtrage Docker ; aucune autre application ne doit utiliser ce port. |
+| Entrant public | TCP `443` (et `80` si utilisé par ACME HTTP-01/redirection) | Router la console HTTPS vers `web:8080` via Coolify. |
+| Interne Docker / boucle locale | TCP `8080` sur `web` | Garder privé ; accessible au proxy, pas directement sur Internet. |
 | Interne Docker | TCP `8554` sur `mediamtx` | Conserver privé ; aucun port hôte à ouvrir. |
-| Sortant | TCP `443` | Autoriser le téléchargement des images depuis les registres et la diffusion RTMPS YouTube. |
+| Sortant | TCP `443` | Autoriser les registres, la diffusion RTMPS YouTube et les échanges OAuth Google. |
 | Sortant | DNS selon la configuration du VPS | Permettre la résolution des noms. |
 
 Le filtrage des ports publiés par Docker peut contourner les règles UFW ;
 vérifier aussi le pare-feu du fournisseur (OVH si utilisé) et `DOCKER-USER`.
 Les accès d'administration Coolify/SSH du VPS restent à gérer suivant votre
-installation. Aucun domaine, certificat HTTP ou port UDP supplémentaire n'est
-requis par cette application. RTMP entrant est en clair : le téléphone reçoit
+installation. La console nécessite un domaine HTTPS ; `ingest.monolithoid.com`
+peut être partagé avec la réception vidéo grâce aux ports distincts (voir le
+[guide du domaine et de Google OAuth](web-console.md)). Aucun port UDP supplémentaire
+n’est requis. RTMP entrant est en clair : le téléphone reçoit
 uniquement son compte de publication, jamais la clé YouTube.
 
 1. Enregistrer les variables, vérifier les montages et cliquer sur **Deploy**.

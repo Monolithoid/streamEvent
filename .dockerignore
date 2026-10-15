@@ -4,3 +4,6 @@
 !assets/
 !assets/*.png
 !LICENSE
+!requirements.txt
+!web/
+!web/**

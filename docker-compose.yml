@@ -37,7 +37,11 @@ services:
     image: ${RELAY_IMAGE:?Set RELAY_IMAGE to your published Docker Hub image}
     restart: unless-stopped
     init: true
-    depends_on: [mediamtx]
+    depends_on:
+      mediamtx:
+        condition: service_started
+      web:
+        condition: service_healthy
     environment:
       INPUT_URL: rtsp://mediamtx:8554/live
       READ_USER: ${READ_USER:-relay}
@@ -51,11 +55,14 @@ services:
       ENCODER_PRESET: ${ENCODER_PRESET:-veryfast}
       ENCODER_THREADS: ${ENCODER_THREADS:-4}
       WAITING_IMAGE: ${WAITING_IMAGE:-/assets/waiting.png}
-      OVERLAY_IMAGE: ${OVERLAY_IMAGE:-/assets/overlay.png}
+      OVERLAY_IMAGE: /data/overlay/overlay.png
+      RELAY_STATUS_FILE: /data/status/relay.json
       STALE_SECONDS: ${STALE_SECONDS:-1.5}
       READY_FRAMES: ${READY_FRAMES:-5}
       OUTPUT_STALL_SECONDS: ${OUTPUT_STALL_SECONDS:-20}
     volumes:
+      - overlay-data:/data/overlay:ro
+      - relay-status:/data/status
       - type: bind
         source: ${ASSETS_DIR:-./assets}
         target: /assets
@@ -76,6 +83,49 @@ services:
       start_period: 30s
       retries: 3
     logging: *logs
+
+  web:
+    image: ${RELAY_IMAGE:?Set RELAY_IMAGE to your published Docker Hub image}
+    restart: unless-stopped
+    init: true
+    entrypoint: [gunicorn, "--bind=0.0.0.0:8080", "--workers=1", "--threads=4", "--timeout=30", "web.app:create_app()"]
+    ports:
+      - "${WEB_BIND_IP:-127.0.0.1}:${WEB_PORT:-8080}:8080"
+    environment:
+      WEB_PUBLIC_URL: ${WEB_PUBLIC_URL:-}
+      WEB_SECRET_KEY: ${WEB_SECRET_KEY:-}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_ALLOWED_EMAILS: ${GOOGLE_ALLOWED_EMAILS:-}
+      WIDTH: ${WIDTH:-1920}
+      HEIGHT: ${HEIGHT:-1080}
+      OVERLAY_BASE_IMAGE: ${OVERLAY_IMAGE:-/assets/overlay.png}
+    volumes:
+      - overlay-data:/data/overlay
+      - relay-status:/data/status:ro
+      - type: bind
+        source: ${ASSETS_DIR:-./assets}
+        target: /assets
+        read_only: true
+    networks: [stream]
+    read_only: true
+    tmpfs: ["/tmp:size=32m,mode=1777"]
+    mem_limit: 256m
+    cpus: 1.0
+    pids_limit: 32
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      start_period: 15s
+      retries: 5
+    logging: *logs
+
+volumes:
+  overlay-data:
+  relay-status:
 
 networks:
   stream:

@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import sys
 import time
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -54,6 +55,23 @@ class SwitchTests(unittest.TestCase):
             self.assertIn("u:a%40b%3Ac@", cfg.input_url)
             with patch.dict(os.environ, {"WIDTH": "1919"}):
                 self.assertRaises(ValueError, c.Config.load)
+
+    def test_status_reports_progress_without_credentials(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "relay.json"
+            class Encoder:
+                progress_seen = True
+                last_progress = time.monotonic()
+                def alive(self):
+                    return True
+            cfg = c.Config(input_url="rtsp://u:secret@host/live", output_url="rtmps://host/key")
+            with patch.dict(os.environ, {"RELAY_STATUS_FILE": str(path)}):
+                c.write_status(cfg, "live", Encoder(), time.monotonic() - 10)
+            payload = c.json.loads(path.read_text())
+            self.assertTrue(payload["output_healthy"])
+            self.assertEqual(payload["state"], "live")
+            self.assertNotIn("secret", path.read_text())
+            self.assertNotIn("rtmp", path.read_text())
 
     def test_logs_redact_secrets(self):
         cfg = c.Config(input_url="rtsp://u:secret@host/live", output_url="rtmps://host/key")

@@ -255,7 +255,8 @@ class Output:
                "-framerate", str(cfg.fps), "-i", "pipe:0",
                "-thread_queue_size", "8", "-probesize", "32", "-analyzeduration", "0",
                "-f", "s16le", "-ar", "48000", "-ac", "2", "-i", f"pipe:{audio_read}",
-               "-i", cfg.overlay, "-filter_complex", "[0:v][2:v]overlay=0:0:eof_action=repeat:format=auto,format=yuv420p[v]",
+               "-thread_queue_size", "2", "-probesize", "32", "-analyzeduration", "0",
+               "-threads", "1", "-re", "-f", "image2", "-loop", "1", "-framerate", "1", "-i", cfg.overlay, "-filter_complex", "[0:v][2:v]overlay=0:0:eof_action=repeat:format=auto,format=yuv420p[v]",
                "-map", "[v]", "-map", "1:a:0", "-c:v", "libx264", "-preset", cfg.preset,
                "-threads", str(cfg.threads), "-tune", "zerolatency", "-b:v", cfg.bitrate,
                "-minrate", cfg.bitrate, "-maxrate", cfg.bitrate, "-bufsize", cfg.bitrate,
@@ -334,6 +335,28 @@ def waiting_frame(cfg):
     return result
 
 
+def write_status(cfg, state, output, started):
+    """Publish safe observed state only; never include URLs or credentials."""
+    destination = os.getenv("RELAY_STATUS_FILE")
+    if not destination:
+        return
+    now = time.monotonic()
+    payload = {
+        "updated_at": time.time(), "state": state or "waiting",
+        "output_healthy": bool(output and output.alive() and output.progress_seen
+                               and now - output.last_progress < 5),
+        "width": cfg.width, "height": cfg.height, "fps": cfg.fps,
+        "video_bitrate": cfg.bitrate, "uptime_seconds": int(now - started),
+    }
+    path = Path(destination)
+    try:
+        temporary = path.with_suffix(".tmp")
+        temporary.write_text(json.dumps(payload))
+        temporary.replace(path)
+    except OSError:
+        LOG.warning("status_write_failed")
+
+
 def run(cfg):
     waiting = waiting_frame(cfg)
     silence = bytes(cfg.audio_size)
@@ -343,6 +366,8 @@ def run(cfg):
     state = None
     tick = time.monotonic()
     last_health = 0.0
+    last_status = 0.0
+    started = time.monotonic()
     try:
         while not STOP.is_set():
             now = time.monotonic()
@@ -372,6 +397,9 @@ def run(cfg):
                 if now - last_health >= 2 and output.progress_seen and now - output.last_progress < 5:
                     HEALTH.touch()
                     last_health = now
+            if now - last_status >= 2:
+                write_status(cfg, state, output, started)
+                last_status = now
             tick += 1 / cfg.fps
             if time.monotonic() - tick > 0.5:
                 # Losing the clock cannot be hidden: restart rather than accumulate drift.
