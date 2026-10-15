@@ -236,7 +236,7 @@ sur le serveur cible avant de déployer.
 | --- | --- | --- |
 | Entrant public | TCP `1935`, ou la valeur de `RTMP_PORT` | Autoriser dans le pare-feu du fournisseur/VPS et le filtrage Docker ; aucune autre application ne doit utiliser ce port. |
 | Entrant public | TCP `443` (et `80` si utilisé par ACME HTTP-01/redirection) | Router la console HTTPS vers `web:8080` via Coolify. |
-| Interne Docker / boucle locale | TCP `8080` sur `web` | Garder privé ; accessible au proxy, pas directement sur Internet. |
+| Interne Docker | TCP `8080` sur `web` | Accessible au proxy via le réseau Docker ; aucune publication sur le port 8080 du VPS. |
 | Interne Docker | TCP `8554` sur `mediamtx` | Conserver privé ; aucun port hôte à ouvrir. |
 | Sortant | TCP `443` | Autoriser les registres, la diffusion RTMPS YouTube et les échanges OAuth Google. |
 | Sortant | DNS selon la configuration du VPS | Permettre la résolution des noms. |
