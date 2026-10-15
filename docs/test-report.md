@@ -54,7 +54,7 @@ Les essais ont aussi révélé un faux log de dépassement d’horloge pendant
 l’attente volontaire de fermeture d’une sortie en panne. Le contrôleur remet
 désormais son échéance à jour après cette fermeture ; la sortie était déjà coupée.
 
-La publication distante GHCR, le téléchargement depuis Coolify, la connexion
+La publication distante Docker Hub, le téléchargement depuis Coolify, la connexion
 RTMPS réelle, le maintien d’un événement YouTube, les téléphones et la
 synchronisation labiale sur plusieurs heures restent à valider séparément
 avec [la procédure terrain](validation.md). Le workflow est prêt à construire,

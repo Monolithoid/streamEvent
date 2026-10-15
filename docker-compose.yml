@@ -24,7 +24,7 @@ services:
         max-file: "3"
 
   relay:
-    image: ${RELAY_IMAGE:?Set RELAY_IMAGE to your published GHCR image}
+    image: ${RELAY_IMAGE:?Set RELAY_IMAGE to your published Docker Hub image}
     restart: unless-stopped
     init: true
     depends_on: [mediamtx]
