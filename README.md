@@ -65,8 +65,8 @@ openssl rand -hex 24
 
 Reporter les deux mots de passe différents dans `.env`, remplacer la clé YouTube
 et choisir l’image Docker Hub publiée. Pour les utilisateurs/mots de passe MediaMTX,
-utiliser uniquement lettres, chiffres, tirets et underscores : ils sont insérés
-dans du JSON par Compose. Ne pas utiliser `any` comme utilisateur.
+utiliser uniquement lettres, chiffres, tirets et underscores : ils sont transmis
+par les variables du Compose. Ne pas utiliser `any` comme utilisateur.
 
 ```sh
 docker compose config --quiet
@@ -111,7 +111,7 @@ et 1 CPU/512 Mo pour MediaMTX ; ajuster après mesure avec les autres services.
 `MEDIAMTX_CONFIG` désigne un fichier sur le serveur Docker, pas un chemin dans le
 conteneur ni un nom de volume Docker. En local, `.env.example` utilise le fichier
 Git `./config/mediamtx.yml`. Les comptes restent configurés par
-`MTX_AUTHINTERNALUSERS`, issu des variables.
+les variables numérotées `MTX_AUTHINTERNALUSERS_*`.
 
 ## YouTube et gestion des sessions
 
@@ -161,6 +161,14 @@ Choisir H.264, AAC, paysage, 1080p30 à environ 6 Mbit/s si le réseau montant l
 permet, sinon 720p30 à 3–4 Mbit/s. Désactiver l’économie de batterie de l’application
 et tester sur le terrain. RTMP ne chiffre ni les identifiants ni la vidéo. Ne
 jamais utiliser la clé YouTube ou un mot de passe réutilisé ailleurs sur le téléphone.
+
+## Entrée RTMPS pour Streamcaster
+
+La variante autonome [`docker-compose.rtmps.yml`](docker-compose.rtmps.yml)
+permet de publier sans identifiants sur `live`, avec chiffrement TLS et lecture
+interne du relais authentifiée. Elle exige un certificat valide monté depuis le
+VPS ; le certificat HTTPS du proxy Coolify n'est pas automatiquement disponible.
+Voir le [guide RTMPS, certificats et renouvellement](docs/rtmps.md).
 
 ## Images et paramètres
 

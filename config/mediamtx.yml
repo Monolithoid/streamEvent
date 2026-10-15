@@ -3,7 +3,7 @@ logDestinations: [stdout]
 readTimeout: 5s
 writeTimeout: 5s
 authMethod: internal
-# Replaced by MTX_AUTHINTERNALUSERS from Compose; never store real secrets here.
+# Populated by indexed MTX_AUTHINTERNALUSERS_* variables from Compose; never store real secrets here.
 authInternalUsers: []
 api: no
 metrics: no

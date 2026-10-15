@@ -5,6 +5,11 @@ Ce guide correspond au `docker-compose.yml` de production du dépôt : deux serv
 peuvent varier selon la version installée. Les chemins « hôte » désignent le VPS
 Docker cible, y compris si Coolify est installé sur un autre serveur.
 
+Pour recevoir Streamcaster en **RTMPS avec publication anonyme**, utiliser plutôt
+la variante autonome décrite dans le [guide RTMPS](rtmps.md), qui inclut le montage
+des certificats et le port TCP 1936. Les étapes ci-dessous concernent le Compose
+RTMP avec authentification de publication.
+
 ## 1. Préparer le déploiement
 
 - Disposer d'un VPS Linux amd64 avec Docker et d'un serveur cible opérationnel dans
@@ -66,8 +71,8 @@ Les valeurs ci-dessous sont celles du Compose et de `.env.example`, sauf
 `ASSETS_DIR` et `MEDIAMTX_CONFIG` qui utilisent ici des chemins persistants absolus
 sur le VPS. Remplacer
 tous les exemples de secrets. Pour les deux comptes MediaMTX, utiliser uniquement
-lettres, chiffres, tirets et underscores : leurs valeurs sont interpolées dans
-du JSON. Ne pas utiliser `any` comme nom d'utilisateur.
+lettres, chiffres, tirets et underscores : leurs valeurs sont transmises par les variables
+du Compose. Ne pas utiliser `any` comme nom d'utilisateur.
 
 ### Image, authentification et YouTube
 
@@ -119,7 +124,7 @@ Compose : aucune variable dédiée ne permet de les changer actuellement.
 | `OUTPUT_STALL_SECONDS` | `20` | Délai sans progression de l'encodeur avant sa relance, de `5` à `120` secondes. |
 
 Le Compose renseigne lui-même `INPUT_URL=rtsp://mediamtx:8554/live` et construit
-`MTX_AUTHINTERNALUSERS` à partir des deux comptes. Ne pas les saisir séparément
+`MTX_AUTHINTERNALUSERS_*` à partir des deux comptes. Ne pas les saisir séparément
 dans Coolify. `OUTPUT_URL` est réservé aux tests du contrôleur et n'est pas exposé
 par le Compose de production.
 
@@ -209,7 +214,7 @@ Pour un lancement local avec le fichier Git, `.env.example` définit
 `MEDIAMTX_CONFIG=./config/mediamtx.yml`. Un chemin relatif est résolu sur l'hôte
 par rapport au fichier Compose, jamais dans le conteneur. Pour Coolify, utiliser
 le chemin absolu persistant ci-dessus. Garder l'authentification via
-`MTX_AUTHINTERNALUSERS`, sans vrais mots de passe dans le YAML. Redéployer après
+`MTX_AUTHINTERNALUSERS_*`, sans vrais mots de passe dans le YAML. Redéployer après
 une modification du fichier ; une mise à jour Git ne remplace pas cette copie.
 
 ### Sauvegardes

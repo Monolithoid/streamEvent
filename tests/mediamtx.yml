@@ -1,23 +1,7 @@
 logLevel: warn
 authMethod: internal
-authInternalUsers:
-  - user: phone
-    pass: test-publish-only
-    permissions:
-      - action: publish
-        path: live
-  - user: relay
-    pass: test-read-only
-    permissions:
-      - action: read
-        path: live
-  - user: sink
-    pass: test-sink-only
-    permissions:
-      - action: publish
-        path: program
-      - action: read
-        path: program
+# Exercise the same indexed environment loading as production.
+authInternalUsers: []
 rtspTransports: [tcp]
 hls: no
 webrtc: no
