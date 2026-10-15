@@ -6,6 +6,7 @@ import sys
 import time
 import tempfile
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location("controller", Path(__file__).parents[1] / "scripts/stream_controller.py")
@@ -60,6 +61,7 @@ class SwitchTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "relay.json"
             class Encoder:
+                overlay = SimpleNamespace(snapshot=(b"decoded", c.hashlib.sha256(b"test-overlay").hexdigest()))
                 progress_seen = True
                 last_progress = time.monotonic()
                 def alive(self):

@@ -5,6 +5,8 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
+from unittest.mock import patch
 import time
 import unittest
 
@@ -17,9 +19,58 @@ sys.modules[spec.name] = c
 spec.loader.exec_module(c)
 
 
+class FlvArrivals:
+    """Observe actual packet arrival times, not just the encoded DTS values."""
+    def __init__(self, path):
+        self.path = path
+        self.samples = []
+        self.stop = threading.Event()
+        self.thread = threading.Thread(target=self.run)
+        self.thread.start()
+
+    def run(self):
+        buffer, offset, stream = bytearray(), 0, None
+        try:
+            while not self.stop.is_set():
+                if stream is None:
+                    try:
+                        stream = self.path.open('rb')
+                    except FileNotFoundError:
+                        self.stop.wait(0.005)
+                        continue
+                buffer.extend(stream.read())
+                if offset == 0 and len(buffer) >= 13:
+                    offset = 13
+                while offset and len(buffer) >= offset + 11:
+                    size = int.from_bytes(buffer[offset+1:offset+4], 'big')
+                    if len(buffer) < offset + 11 + size + 4:
+                        break
+                    # AVC NALU packet, excluding codec headers and end markers.
+                    if buffer[offset] == 9 and size > 1 and buffer[offset+12] == 1:
+                        stamp = int.from_bytes(buffer[offset+4:offset+7], 'big') + (buffer[offset+7] << 24)
+                        self.samples.append((time.monotonic(), stamp))
+                    offset += 11 + size + 4
+                self.stop.wait(0.005)
+        finally:
+            if stream:
+                stream.close()
+
+    def close(self):
+        self.stop.set()
+        self.thread.join(timeout=2)
+
+    def assert_smooth(self, test):
+        samples = [sample for sample in self.samples if sample[1] >= 2000]
+        test.assertGreater(len(samples), 100)
+        gaps = [b[0]-a[0] for a, b in zip(samples, samples[1:])]
+        # A 1 Hz overlay produces recurring ~0.6-1 s stalls despite valid DTS.
+        test.assertLess(max(gaps), 0.5, f'Video output paused for {max(gaps):.3f}s')
+        test.assertLess(sum(gap > 0.2 for gap in gaps), 3, 'Recurring output bursts')
+
+
 @unittest.skipUnless(shutil.which('ffmpeg'), 'FFmpeg required')
 class LiveOverlayTests(unittest.TestCase):
-    def test_atomic_reload_keeps_encoder_and_alpha(self):
+    def test_web_updates_preserve_alpha_and_output_pacing(self):
         with tempfile.TemporaryDirectory() as directory:
             overlay = Path(directory) / 'overlay.png'
             output_path = Path(directory) / 'output.flv'
@@ -46,13 +97,15 @@ class LiveOverlayTests(unittest.TestCase):
             replace((255, 0, 0, 255))
             cfg = c.Config(width=64, height=64, fps=30, bitrate='200k', threads=1,
                            preset='ultrafast', overlay=str(overlay), output_url=str(output_path))
+            arrivals = FlvArrivals(output_path)
+            self.addCleanup(arrivals.close)
             encoder = c.Output(cfg)
             try:
                 # Black YUV420P, studio range, with silent PCM audio.
                 frame = bytes([16])*4096 + bytes([128])*2048
                 started = time.monotonic()
                 for index in range(240):
-                    if index == 50:
+                    if index == 90:
                         replace((0, 0, 255, 255))
                     encoder.push(frame, bytes(cfg.audio_size))
                     time.sleep(max(0, started + (index+1)/30 - time.monotonic()))
@@ -60,6 +113,8 @@ class LiveOverlayTests(unittest.TestCase):
                 self.assertTrue(encoder.progress_seen)
             finally:
                 encoder.close()
+                arrivals.close()
+            arrivals.assert_smooth(self)
             decoded = subprocess.run(['ffmpeg', '-v', 'error', '-i', str(output_path), '-vf', 'fps=1',
                                       '-threads', '1', '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-'],
                                      capture_output=True, check=True, timeout=15).stdout
@@ -74,3 +129,59 @@ class LiveOverlayTests(unittest.TestCase):
             self.assertGreater(last[2], 220)
             self.assertLess(last[0], 30)
             self.assertLess(max(pixel(frames[-1], 50, 50)), 15)
+
+
+@unittest.skipUnless(shutil.which('ffmpeg'), 'FFmpeg required')
+class OverlayCacheTests(unittest.TestCase):
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.path = Path(self.directory.name) / 'overlay.png'
+        self.cfg = c.Config(width=64, height=64, overlay=str(self.path))
+
+    def save(self, color, size=(64, 64)):
+        temporary = self.path.with_suffix('.tmp')
+        Image.new('RGBA', size, color).save(temporary, format='PNG')
+        temporary.replace(self.path)
+
+    def wait_for(self, check):
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            if check():
+                return
+            time.sleep(0.02)
+        self.fail('Overlay reload timed out')
+
+    def test_unchanged_png_is_not_decoded_again(self):
+        self.save((255, 0, 0, 255))
+        overlay = c.Overlay(self.cfg)
+        self.addCleanup(overlay.close)
+        with patch.object(overlay, 'reload', wraps=overlay.reload) as reload:
+            time.sleep(0.6)
+            reload.assert_not_called()
+
+    def test_invalid_replacement_keeps_last_good_frame_and_recovers(self):
+        self.save((255, 0, 0, 255))
+        overlay = c.Overlay(self.cfg)
+        self.addCleanup(overlay.close)
+        before = overlay.snapshot
+        with patch.object(overlay, 'reload', wraps=overlay.reload) as reload:
+            with self.assertLogs(c.LOG, level='WARNING') as captured:
+                temporary = self.path.with_suffix('.tmp')
+                temporary.write_bytes(b'not-a-png')
+                temporary.replace(self.path)
+                self.wait_for(lambda: bool(captured.records))
+            self.assertIs(overlay.snapshot, before)
+            self.save((0, 0, 255, 255))
+            self.wait_for(lambda: overlay.snapshot[1] != before[1])
+            self.assertEqual(overlay.snapshot[1], c.hashlib.sha256(self.path.read_bytes()).hexdigest())
+
+    def test_small_legacy_png_is_padded_with_alpha(self):
+        self.save((255, 0, 0, 255), size=(16, 16))
+        overlay = c.Overlay(self.cfg)
+        self.addCleanup(overlay.close)
+        pixels = overlay.snapshot[0]
+        alpha = pixels[64*64*3//2:]
+        self.assertEqual(len(pixels), 64*64*5//2)
+        self.assertEqual(alpha[5*64+5], 255)
+        self.assertEqual(alpha[40*64+40], 0)
