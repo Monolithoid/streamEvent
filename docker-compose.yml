@@ -6,7 +6,7 @@ services:
       - "${RTMP_BIND_IP:-0.0.0.0}:${RTMP_PORT:-1935}:1935/tcp"
     environment:
       MTX_AUTHINTERNALUSERS: >-
-        [{"user":"${PUBLISH_USER:?Set PUBLISH_USER}","pass":"${PUBLISH_PASSWORD:?Set PUBLISH_PASSWORD}","ips":[],"permissions":[{"action":"publish","path":"live"}]},{"user":"${READ_USER:-relay}","pass":"${READ_PASSWORD:?Set READ_PASSWORD}","ips":[],"permissions":[{"action":"read","path":"live"}]}]
+        [{"user":"${PUBLISH_USER:?Set PUBLISH_USER}","pass":"${PUBLISH_PASSWORD:?Set PUBLISH_PASSWORD}","ips":[],"permissions":[{"action":"publish","path":"live"}]},{"user":"${READ_USER:-relay}","pass":"${READ_PWD:?Set READ_PWD}","ips":[],"permissions":[{"action":"read","path":"live"}]}]
     volumes:
       - type: bind
         source: ${MEDIAMTX_CONFIG:-/opt/basket-live/config/mediamtx.yml}
@@ -33,9 +33,9 @@ services:
     environment:
       INPUT_URL: rtsp://mediamtx:8554/live
       READ_USER: ${READ_USER:-relay}
-      READ_PASSWORD: ${READ_PASSWORD:?Set READ_PASSWORD}
+      READ_PWD: ${READ_PWD:?Set READ_PWD}
       YOUTUBE_RTMPS_URL: ${YOUTUBE_RTMPS_URL:-rtmps://a.rtmps.youtube.com:443/live2}
-      YOUTUBE_STREAM_KEY: ${YOUTUBE_STREAM_KEY:?Set YOUTUBE_STREAM_KEY}
+      YOUTUBE_STREAM_K: ${YOUTUBE_STREAM_K:?Set YOUTUBE_STREAM_K}
       WIDTH: ${WIDTH:-1920}
       HEIGHT: ${HEIGHT:-1080}
       FPS: ${FPS:-30}
