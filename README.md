@@ -4,7 +4,11 @@ Relais sans interface graphique pour diffuser du basket 3×3 :
 
 **Téléphone → MediaMTX → FFmpeg réception → commutation Python → FFmpeg sortie → YouTube RTMPS.**
 
-Sans téléphone, la sortie continue avec une image d’attente et du silence. Les
+La régie propose **Démarrer YouTube** et **Arrêter YouTube**. Au lancement des
+services et après chaque redémarrage du relais, la diffusion reste arrêtée jusqu’à
+un démarrage explicite dans la console ([détails](docs/web-console.md#démarrer-et-arrêter-youtube)).
+
+Pendant une diffusion, sans téléphone, la sortie continue avec une image d’attente et du silence. Les
 basculements conservent l’encodeur de sortie et sa connexion. Une panne du réseau
 sortant ou un redémarrage exige en revanche une nouvelle connexion ; la conservation
 du même événement YouTube doit être vérifiée sur YouTube.
@@ -77,7 +81,7 @@ docker compose logs -f --tail=100 relay mediamtx
 ```
 
 `config --quiet` valide sans afficher les secrets résolus. Ne jamais commiter `.env`,
-une clé YouTube ou des captures de configuration. L’attente est émise dès le démarrage.
+une clé YouTube ou des captures de configuration. La diffusion reste arrêtée jusqu’au clic sur « Démarrer YouTube » dans la régie.
 
 ## Déploiement Coolify depuis Git
 
@@ -126,16 +130,18 @@ YOUTUBE_STREAM_KEY=votre-cle-secrete
 ```
 
 Utiliser l’URL RTMPS fournie par YouTube si elle diffère. **Désactiver l’arrêt
-automatique** dans Studio. Le relais transmet dès son démarrage ; vérifier la
+automatique** dans Studio. Cliquer sur « Démarrer YouTube » dans la régie, vérifier la
 prévisualisation puis cliquer sur « Passer au direct » si le démarrage manuel est actif.
 
 Entre deux matchs, arrêter uniquement la publication du téléphone : l’attente
-continue. Pour terminer toute la session, arrêter le relais puis terminer
-explicitement l’événement dans Studio :
+continue tant que la diffusion est active. Pour couper l’envoi vidéo, cliquer sur
+« Arrêter YouTube » dans la régie, puis terminer explicitement l’événement dans
+Studio. Pour arrêter aussi les services :
 
 ```sh
 docker compose stop relay
-# Reprendre ; YouTube peut demander un nouvel événement.
+# Reprendre le service, puis cliquer sur « Démarrer YouTube » dans la régie.
+# YouTube peut demander un nouvel événement.
 docker compose start relay
 # Arrêter les services sans supprimer les fichiers montés ni les volumes.
 docker compose down
@@ -270,7 +276,8 @@ rupture sortante ; `decoder_stalled` une réception bloquée ; `scheduler_overru
 une incapacité à tenir la cadence. Réduire la résolution/charge dans ce dernier cas.
 Rotation des logs : trois fichiers de 10 Mo par service.
 
-Le healthcheck vérifie l’avancement de l’encodage. Docker Compose ne redémarre pas
+Le healthcheck vérifie l’avancement de l’encodage pendant la diffusion, ou le
+fonctionnement de la boucle du relais lorsque YouTube est volontairement arrêté. Docker Compose ne redémarre pas
 un conteneur simplement « unhealthy » : le contrôleur gère lui-même ses processus.
 `unless-stopped` reprend un processus principal mort, pas un événement YouTube clôturé.
 

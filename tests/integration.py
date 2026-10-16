@@ -14,6 +14,7 @@ import time
 
 ROOT = Path(__file__).resolve().parents[1]
 RESULTS = ROOT / "test-results"
+RUNTIME = RESULTS / "relay-state"
 COMPOSE = ["docker", "compose", "-p", "basket-live-test", "-f", str(ROOT / "tests/compose.yml")]
 INPUT = "rtmp://127.0.0.1:19350/live?user=phone&pass=test-publish-only"
 PROGRAM = "rtsp://sink:test-sink-only@127.0.0.1:18554/program"
@@ -51,6 +52,9 @@ def probe():
 
 def main():
     RESULTS.mkdir(exist_ok=True)
+    RUNTIME.mkdir(exist_ok=True)
+    # The image runs as UID 10001; only this isolated test control directory is writable.
+    RUNTIME.chmod(0o777)
     subprocess.run(COMPOSE + ["up", "-d", "--wait"], check=True)
     controller = publisher = recorder = None
     log = RESULTS / "controller.log"
@@ -61,32 +65,47 @@ def main():
                ENCODER_PRESET=os.getenv("TEST_PRESET", "ultrafast"),
                ENCODER_THREADS=os.getenv("TEST_THREADS", "2"), WAITING_IMAGE=str(ROOT / "assets/waiting.png"),
                OVERLAY_IMAGE=str(ROOT / "assets/overlay.png"), READY_FRAMES="3", STALE_SECONDS="1",
-               OUTPUT_STALL_SECONDS="10")
+               OUTPUT_STALL_SECONDS="10", RELAY_STATUS_FILE=str(RUNTIME / "relay.json"),
+               RELAY_CONTROL_FILE=str(RUNTIME / "broadcast.json"))
     handles = []
     image = sys.argv[2] if len(sys.argv) == 3 and sys.argv[1] == "--image" else None
     def launch(handle):
+        (RUNTIME / "relay.json").unlink(missing_ok=True)
         if not image:
             return subprocess.Popen([sys.executable, str(ROOT / "scripts/stream_controller.py")],
                                     env=env, stdout=handle, stderr=handle)
         container_env = dict(env, INPUT_URL="rtsp://relay:test-read-only@mediamtx:8554/live",
                              OUTPUT_URL="rtmp://mediamtx:1935/program?user=sink&pass=test-sink-only",
-                             WAITING_IMAGE="/assets/waiting.png", OVERLAY_IMAGE="/assets/overlay.png")
+                             WAITING_IMAGE="/assets/waiting.png", OVERLAY_IMAGE="/assets/overlay.png",
+                             RELAY_STATUS_FILE="/results/relay.json", RELAY_CONTROL_FILE="/results/broadcast.json")
         available = int(subprocess.check_output(["docker", "info", "--format", "{{.NCPU}}"], text=True).strip())
         cpus = os.getenv("TEST_CPUS", str(min(5, available)))
         cmd = ["docker", "run", "--rm", "--init", "--name", "basket-live-test-relay",
                "--network", "basket-live-test_default", "--read-only", "--tmpfs", "/tmp:size=32m,mode=1777",
                "--memory", "1536m", "--cpus", cpus, "--pids-limit", "128",
                "--cap-drop", "ALL", "--security-opt", "no-new-privileges:true",
-               "-v", f"{ROOT / 'assets'}:/assets:ro"]
+               "-v", f"{ROOT / 'assets'}:/assets:ro", "-v", f"{RUNTIME}:/results"]
         for key in ("INPUT_URL", "OUTPUT_URL", "READ_USER", "READ_PASSWORD", "WIDTH", "HEIGHT", "FPS",
                     "VIDEO_BITRATE", "ENCODER_PRESET", "ENCODER_THREADS", "WAITING_IMAGE", "OVERLAY_IMAGE",
-                    "READY_FRAMES", "STALE_SECONDS", "OUTPUT_STALL_SECONDS"):
+                    "READY_FRAMES", "STALE_SECONDS", "OUTPUT_STALL_SECONDS", "RELAY_STATUS_FILE", "RELAY_CONTROL_FILE"):
             cmd += ["-e", f"{key}={container_env[key]}"]
         return subprocess.Popen(cmd + [image], stdout=handle, stderr=handle)
+    def start_broadcast():
+        status_path = RUNTIME / 'relay.json'
+        wait_for(status_path.exists, 'idle relay status')
+        observed = json.loads(status_path.read_text())
+        assert observed['broadcast_enabled'] is False, 'Relay must start idle'
+        assert not probe(), 'Output must remain disconnected until start'
+        command = RUNTIME / 'broadcast.json'
+        temporary = command.with_suffix('.tmp')
+        temporary.write_text(json.dumps({'run_id': observed['run_id'], 'enabled': True}))
+        temporary.replace(command)
+
     try:
         handle = log.open("w")
         handles.append(handle)
         controller = launch(handle)
+        start_broadcast()
         wait_for(probe, "waiting stream with H264/AAC")
         denied = subprocess.run(["ffprobe", "-v", "error", "-rtsp_transport", "tcp", "-timeout", "2000000",
                                  "-show_streams", "rtsp://127.0.0.1:18554/program"],
@@ -141,10 +160,25 @@ def main():
         wait_for(lambda: log.read_text().count("output_started") > started, "output reconnection", 45)
         wait_for(probe, "recovered H264/AAC output", 45)
         print("PASS receiver outage and automatic reconnection", flush=True)
+        observed = json.loads((RUNTIME / 'relay.json').read_text())
+        command = RUNTIME / 'broadcast.json'
+        temporary = command.with_suffix('.tmp')
+        temporary.write_text(json.dumps({'run_id': observed['run_id'], 'enabled': False}))
+        temporary.replace(command)
+        wait_for(lambda: not json.loads((RUNTIME / 'relay.json').read_text())['broadcast_enabled'],
+                 'manual stop acknowledged')
+        assert not probe(), 'Output must disconnect after manual stop'
+        started = log.read_text().count('output_started')
+        time.sleep(3)
+        assert log.read_text().count('output_started') == started, 'Stopped output reconnected'
+        start_broadcast()
+        wait_for(probe, 'manual restart')
+        print('PASS manual stop and restart', flush=True)
         stop(controller)
         handle = (RESULTS / "controller-restart.log").open("w")
         handles.append(handle)
         controller = launch(handle)
+        start_broadcast()
         wait_for(probe, "controller restart into waiting")
         print("PASS controller restart", flush=True)
     finally:
