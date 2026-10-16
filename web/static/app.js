@@ -113,21 +113,38 @@ async function loadIngest() {
     $('ingest-fields').replaceChildren(...fields);
   } catch(e) {$('ingest-help').textContent = e.message;}
 }
+let broadcastPending = false;
+for (const [id, enabled] of [['start-broadcast', true], ['stop-broadcast', false]]) {
+  $(id).onclick = async () => {
+    broadcastPending = true;
+    $('start-broadcast').disabled = $('stop-broadcast').disabled = true;
+    try {
+      await api('/api/broadcast', {enabled});
+      $('broadcast-message').textContent = enabled ? 'Démarrage demandé…' : 'Arrêt demandé…';
+    } catch (e) {$('broadcast-message').textContent = e.message;}
+    finally {broadcastPending = false;}
+  };
+}
 async function status() {
   try {
     const s = await (await api('/api/status')).json();
     if (publishedHash) {
       if (s.stale) $('delivery').textContent = 'Statut du relais indisponible : réception du PNG non confirmée.';
+      else if (s.broadcast_enabled === false) $('delivery').textContent = 'Overlay enregistré. Sa réception sera confirmée au démarrage de la diffusion YouTube.';
       else if (!s.overlay_sha256) $('delivery').textContent = 'Le relais ne fournit pas la confirmation du PNG. Mettez web et relay à jour avec la même image Docker.';
       else if (s.overlay_sha256 === publishedHash) $('delivery').textContent = 'Le relais voit le PNG validé. Prévoir quelques secondes de relecture, puis le délai de la plateforme vidéo.';
       else if (Date.now() - publishedAt > 10000) $('delivery').textContent = 'Le relais ne voit pas le PNG validé. Vérifiez que web et relay partagent le même volume overlay-data et le chemin /data/overlay/overlay.png.';
     }
+    const available = !s.stale && Boolean(s.run_id) && typeof s.broadcast_enabled === 'boolean';
+    $('start-broadcast').disabled = broadcastPending || !available || s.broadcast_enabled;
+    $('stop-broadcast').disabled = broadcastPending || !available;
+    if (!broadcastPending) $('broadcast-message').textContent = !available ? 'Commande indisponible : vérifiez le relais et sa version.' : s.broadcast_enabled ? (s.output_healthy ? 'Diffusion vers YouTube active.' : 'Connexion à YouTube en cours…') : 'Diffusion YouTube arrêtée.';
     $('connection').textContent = s.stale ? 'Statut indisponible' : '● Relais connecté';
     $('state').textContent = s.stale ? 'Inconnue' : s.state === 'live' ? 'Caméra en direct' : 'Image d’attente';
-    $('output').textContent = s.stale ? 'Inconnue' : s.output_healthy ? 'Encodage actif' : 'Reconnexion…';
+    $('output').textContent = s.stale ? 'Inconnue' : s.broadcast_enabled === false ? 'YouTube arrêté' : s.output_healthy ? 'Encodage actif' : 'Reconnexion…';
     $('format').textContent = s.stale ? '—' : `${s.width} × ${s.height} · ${s.fps} ips`;
     $('bitrate').textContent = s.stale ? '—' : s.video_bitrate;
-  } catch(e) {$('connection').textContent = 'Statut indisponible'; for (const id of ['state','output','format','bitrate']) $(id).textContent = '—';}
+  } catch(e) {$('start-broadcast').disabled = $('stop-broadcast').disabled = true; $('broadcast-message').textContent = 'Statut de diffusion indisponible.'; $('connection').textContent = 'Statut indisponible'; for (const id of ['state','output','format','bitrate']) $(id).textContent = '—';}
 }
 (async () => {
   try {model = await (await api('/api/overlay')).json(); $('dimensions').textContent = `${model.width} × ${model.height} · ALPHA`; $('preview').src = '/api/overlay.png';drawEditor();$('preset').disabled = false;$('publish').disabled = true;publishedHash = model.sha256;publishedAt = Date.now();message('Éditeur prêt · ajoutez ou modifiez une zone pour préparer la suite.');if(model.updated_at) $('lastUpdate').textContent = 'Dernière validation : ' + new Date(model.updated_at*1000).toLocaleTimeString('fr-FR');}

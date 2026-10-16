@@ -180,6 +180,35 @@ transmis à cet encart. Après mise à jour, recréer `web` pour qu’il reçoiv
 nouvelles variables du Compose. Vérifier la copie des valeurs sans les publier
 dans les logs ou captures d’écran.
 
+## Démarrer et arrêter YouTube
+
+Les services démarrent avec la diffusion YouTube **arrêtée**, même après un
+redémarrage du relais. La réception de la caméra et l’édition de l’overlay restent
+disponibles. Dans l’encart « Contrôler le direct » :
+
+- **Démarrer YouTube** ouvre la connexion de sortie. Sans caméra, le relais envoie
+  l’image d’attente et du silence ; avec une caméra prête, il envoie sa vidéo.
+- **Arrêter YouTube** ferme l’encodeur et sa connexion à YouTube sans arrêter les
+  services. Attendre le statut « Diffusion YouTube arrêtée » pour confirmation.
+- Une coupure de sortie pendant une diffusion demandée déclenche les tentatives
+  de reconnexion habituelles. Un redémarrage du processus exige un nouveau clic
+  sur « Démarrer YouTube ».
+
+Ces commandes nécessitent la connexion Google et une protection CSRF. Elles
+passent par `RELAY_CONTROL_FILE=/data/overlay/broadcast.json` dans le volume partagé
+`overlay-data` (web écrit, relay lit). Elles sont liées à l’identifiant du processus
+du relais ; une ancienne commande persistée ne relance pas une nouvelle instance.
+Le service reste sain lorsqu’il attend volontairement un démarrage.
+
+Pour appliquer la mise à jour, reconstruire/publier l’image, puis recréer **web et
+relay** avec cette image et le Compose à jour (RTMP ou RTMPS). La console n’a pas
+besoin de la clé YouTube ni d’un accès au socket Docker.
+
+Ces boutons contrôlent l’envoi vidéo, pas le cycle de vie de l’événement YouTube.
+Selon les options de démarrage/arrêt automatiques de YouTube Studio, il peut être
+nécessaire de lancer ou terminer l’événement dans Studio. Si l’arrêt automatique
+termine l’événement, un nouveau démarrage du relais ne garantit pas sa reprise.
+
 ## Préparer et diffuser un overlay
 
 - Ajouter des zones ou choisir « Créer un tableau de score ».

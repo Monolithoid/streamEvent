@@ -71,6 +71,7 @@ services:
       WAITING_IMAGE: ${WAITING_IMAGE:-/assets/waiting.png}
       OVERLAY_IMAGE: /data/overlay/overlay.png
       RELAY_STATUS_FILE: /data/status/relay.json
+      RELAY_CONTROL_FILE: /data/overlay/broadcast.json
       STALE_SECONDS: ${STALE_SECONDS:-1.5}
       READY_FRAMES: ${READY_FRAMES:-5}
       OUTPUT_STALL_SECONDS: ${OUTPUT_STALL_SECONDS:-20}
@@ -118,6 +119,7 @@ services:
       INGEST_STREAM_KEY: ${INGEST_STREAM_KEY:?Set INGEST_STREAM_KEY}
       WIDTH: ${WIDTH:-1920}
       HEIGHT: ${HEIGHT:-1080}
+      RELAY_CONTROL_FILE: /data/overlay/broadcast.json
       OVERLAY_BASE_IMAGE: ${OVERLAY_BASE_IMAGE:-/assets/overlay.png}
     volumes:
       - overlay-data:/data/overlay

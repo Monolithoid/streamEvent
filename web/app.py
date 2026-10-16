@@ -88,6 +88,7 @@ def create_app(settings=None):
         PUBLISH_PASSWORD=os.getenv('PUBLISH_PASSWORD', ''),
         DATA_DIR=os.getenv('OVERLAY_DATA_DIR', '/data/overlay'),
         BASE_IMAGE=os.getenv('OVERLAY_BASE_IMAGE', '/assets/overlay.png'),
+        CONTROL_FILE=os.getenv('RELAY_CONTROL_FILE', '/data/overlay/broadcast.json'),
         STATUS_FILE=os.getenv('RELAY_STATUS_FILE', '/data/status/relay.json'),
         FONT_PATH=os.getenv('OVERLAY_FONT', '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'),
         WIDTH=int(os.getenv('WIDTH', '1920')), HEIGHT=int(os.getenv('HEIGHT', '1080')),
@@ -235,6 +236,26 @@ def create_app(settings=None):
         if result['authentication']:
             result.update(username=cfg['PUBLISH_USER'], password=cfg['PUBLISH_PASSWORD'])
         return result
+
+    @app.post('/api/broadcast')
+    def broadcast():
+        document = request.get_json(silent=True)
+        if not isinstance(document, dict) or type(document.get('enabled')) is not bool:
+            return jsonify(error='La commande doit préciser enabled : true ou false.'), 400
+        try:
+            observed = json.loads(Path(cfg['STATUS_FILE']).read_text())
+            if (not isinstance(observed.get('run_id'), str) or not observed['run_id']
+                    or not 0 <= time.time() - observed['updated_at'] < 10):
+                raise ValueError()
+        except (OSError, ValueError, KeyError, TypeError, AttributeError):
+            return jsonify(error='Relais indisponible ou à mettre à jour. Réessayez après son démarrage.'), 503
+        command = {'run_id': observed['run_id'], 'enabled': document['enabled']}
+        try:
+            with lock:
+                atomic_write(Path(cfg['CONTROL_FILE']), json.dumps(command).encode())
+        except OSError:
+            return jsonify(error='Impossible de transmettre la commande au relais.'), 503
+        return jsonify(command), 202
 
     @app.get('/api/status')
     def status():

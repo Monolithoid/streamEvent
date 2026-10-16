@@ -14,6 +14,7 @@ import subprocess
 import sys
 import threading
 import time
+import uuid
 from urllib.parse import quote, urlsplit, urlunsplit
 
 LOG = logging.getLogger("relay")
@@ -408,7 +409,22 @@ def waiting_frame(cfg):
     return result
 
 
-def write_status(cfg, state, output, started):
+class BroadcastControl:
+    """Only commands targeting this process may open the output connection."""
+    def __init__(self):
+        self.run_id = uuid.uuid4().hex
+        self.path = Path(os.getenv("RELAY_CONTROL_FILE", "/tmp/relay-control.json"))
+
+    def enabled(self):
+        try:
+            command = json.loads(self.path.read_text())
+            return (isinstance(command, dict) and command.get("run_id") == self.run_id
+                    and command.get("enabled") is True)
+        except (OSError, ValueError):
+            return False
+
+
+def write_status(cfg, state, output, started, control=None, enabled=False):
     """Publish safe observed state only; never include URLs or credentials."""
     destination = os.getenv("RELAY_STATUS_FILE")
     if not destination:
@@ -416,6 +432,7 @@ def write_status(cfg, state, output, started):
     now = time.monotonic()
     payload = {
         "updated_at": time.time(), "state": state or "waiting",
+        "run_id": control.run_id if control else None, "broadcast_enabled": enabled,
         "output_healthy": bool(output and output.alive() and output.progress_seen
                                and now - output.last_progress < 5),
         "width": cfg.width, "height": cfg.height, "fps": cfg.fps,
@@ -437,6 +454,7 @@ def run(cfg):
     waiting = waiting_frame(cfg)
     silence = bytes(cfg.audio_size)
     inputs = InputSupervisor(cfg)
+    control = BroadcastControl()
     output = None
     retry_at, delay = 0.0, 1
     state = None
@@ -447,6 +465,19 @@ def run(cfg):
     try:
         while not STOP.is_set():
             now = time.monotonic()
+            enabled = control.enabled()
+            if not enabled:
+                retry_at, delay = 0.0, 1
+                if output:
+                    output.close()
+                    output = None
+                    tick = time.monotonic()
+                    LOG.info("broadcast_stopped")
+            frame, audio = inputs.select(now)
+            selected = "live" if frame else "waiting"
+            if selected != state:
+                LOG.info("switch state=%s", selected)
+                state = selected
             if output and not output.alive():
                 LOG.warning("output_lost retry_in=%ds", delay)
                 output.close()
@@ -457,24 +488,23 @@ def run(cfg):
                 HEALTH.unlink(missing_ok=True)
                 retry_at = time.monotonic() + delay
                 delay = min(delay * 2, 30)
-            if output is None and now >= retry_at:
+            if enabled and output is None and now >= retry_at:
                 output = Output(cfg)
                 output_started = now
                 tick = time.monotonic()
             if output:
-                frame, audio = inputs.select(now)
-                selected = "live" if frame else "waiting"
-                if selected != state:
-                    LOG.info("switch state=%s", selected)
-                    state = selected
                 output.push(frame if frame else waiting, audio if audio else silence)
                 if now - output_started > 60:
                     delay = 1
                 if now - last_health >= 2 and output.progress_seen and now - output.last_progress < 5:
                     HEALTH.touch()
                     last_health = now
+            # An intentionally stopped broadcast is a healthy idle service.
+            if not enabled and now - last_health >= 2:
+                HEALTH.touch()
+                last_health = now
             if now - last_status >= 2:
-                write_status(cfg, state, output, started)
+                write_status(cfg, state, output, started, control, enabled)
                 last_status = now
             tick += 1 / cfg.fps
             if time.monotonic() - tick > 0.5:
