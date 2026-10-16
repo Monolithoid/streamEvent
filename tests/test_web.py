@@ -22,6 +22,7 @@ class ConsoleTests(unittest.TestCase):
                              GOOGLE_CLIENT_ID='test', GOOGLE_CLIENT_SECRET='test',
                              WEB_PUBLIC_URL='https://console.example', ALLOWED_EMAILS='admin@example.com',
                              DATA_DIR=self.temp.name, BASE_IMAGE=str(self.base), WIDTH=320, HEIGHT=180,
+                             CONTROL_FILE=str(Path(self.temp.name) / 'broadcast.json'),
                              STATUS_FILE=str(Path(self.temp.name) / 'status.json'))
         self.app = create_app(self.settings)
         self.client = self.app.test_client()
@@ -42,7 +43,7 @@ class ConsoleTests(unittest.TestCase):
     def test_all_sensitive_routes_require_auth(self):
         for path in ['/api/status', '/api/overlay', '/api/overlay.png', '/api/ingest']:
             self.assertEqual(self.client.get(path).status_code, 401)
-        for path in ['/api/preview', '/api/overlay', '/logout']:
+        for path in ['/api/preview', '/api/overlay', '/api/broadcast', '/logout']:
             self.assertIn(self.client.post(path, json={}).status_code, (302, 401))
         self.assertEqual(self.client.get('/').status_code, 302)
         with self.client.session_transaction() as session:
@@ -125,6 +126,24 @@ class ConsoleTests(unittest.TestCase):
             self.assertEqual(response.status_code, expected)
             if expected == 200:
                 self.assertEqual(response.json['server_url'], url)
+
+    def test_broadcast_requires_csrf_fresh_relay_and_boolean_command(self):
+        self.authenticate()
+        path = Path(self.settings['CONTROL_FILE'])
+        self.assertEqual(self.client.post('/api/broadcast', json={'enabled': True}).status_code, 403)
+        self.assertEqual(self.post('/api/broadcast', {'enabled': True}).status_code, 503)
+        for bad in [None, {}, {'enabled': 'true'}, {'enabled': 1}]:
+            self.assertEqual(self.post('/api/broadcast', bad).status_code, 400)
+        status = Path(self.settings['STATUS_FILE'])
+        for value in [{}, {'updated_at': time.time() - 30, 'run_id': 'old'},
+                      {'updated_at': time.time(), 'run_id': None}]:
+            status.write_text(json.dumps(value))
+            self.assertEqual(self.post('/api/broadcast', {'enabled': True}).status_code, 503)
+        self.assertFalse(path.exists())
+        status.write_text(json.dumps({'updated_at': time.time(), 'run_id': 'current'}))
+        for enabled in (True, True, False):
+            self.assertEqual(self.post('/api/broadcast', {'enabled': enabled}).status_code, 202)
+            self.assertEqual(json.loads(path.read_text()), {'enabled': enabled, 'run_id': 'current'})
 
     def test_status_staleness(self):
         self.authenticate()

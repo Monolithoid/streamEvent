@@ -6,7 +6,12 @@ MediaMTX authentifie et distribue les flux ; il ne fabrique pas une vidéo conti
 lorsqu’un téléphone disparaît. Une entrée RTSP FFmpeg absente peut bloquer ou
 terminer. Relancer l’encodeur à chaque basculement fermerait la connexion YouTube.
 
-Le contrôleur fournit une trame YUV420p et 48 000/FPS échantillons PCM stéréo par
+La sortie YouTube reste fermée au démarrage du relais. La console écrit une
+commande start/stop liée à l’identifiant de cette instance dans le volume partagé.
+Un redémarrage invalide les anciennes commandes. L’arrêt ferme seulement la
+sortie ; la réception reste active et le healthcheck accepte cet état volontaire.
+
+Pendant une diffusion demandée, le contrôleur fournit une trame YUV420p et 48 000/FPS échantillons PCM stéréo par
 tick d’horloge monotone. Les deux pipes sont alimentés par des threads indépendants.
 L’encodeur reconstruit les timestamps à partir des compteurs de trames/échantillons,
 ajoute l’overlay et produit une seule sortie H.264/AAC.
