@@ -9,3 +9,10 @@ test-results/
 *.ts
 *.mp4
 secrets/
+
+# Certificates and keys
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
