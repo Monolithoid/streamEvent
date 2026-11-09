@@ -11,6 +11,8 @@ permissions:
 
 env:
   DOCKERHUB_IMAGE: ${{ vars.DOCKERHUB_IMAGE || 'monolithoid/streamevent-relay' }}
+  # Docker Hub short description: 100 bytes max (accented characters count double).
+  SHORT_DESCRIPTION: "Relais vers YouTube pour le basket 3×3 : MediaMTX, FFmpeg et régie web"
 
 jobs:
   verify:
@@ -80,6 +82,11 @@ jobs:
             type=sha,format=long
             type=ref,event=branch
             type=ref,event=tag
+          labels: |
+            org.opencontainers.image.title=streamEvent relay
+            org.opencontainers.image.description=${{ env.SHORT_DESCRIPTION }}
+            org.opencontainers.image.documentation=${{ github.server_url }}/${{ github.repository }}#readme
+            org.opencontainers.image.vendor=monolithoid
       - uses: docker/build-push-action@v6
         with:
           context: .
@@ -88,3 +95,44 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Compose Docker Hub overview
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        env:
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+          RAW_URL: https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}
+        shell: bash
+        run: |
+          # Docker Hub cannot resolve the README's relative paths: images point to the
+          # raw file of this commit, other links to the file on GitHub.
+          python3 - README.md "$RUNNER_TEMP/dockerhub-README.md" <<'PY'
+          import os, re, sys
+          src, dst = sys.argv[1], sys.argv[2]
+          repo, raw, ref = os.environ["REPO_URL"], os.environ["RAW_URL"], os.environ["GITHUB_REF_NAME"]
+          text = open(src, encoding="utf-8").read()
+          def absolute(path):
+              path = path[2:] if path.startswith("./") else path
+              if re.search(r"\.(png|jpe?g|gif|svg|webp)$", path.split("#")[0], re.I):
+                  return f"{raw}/{path}"
+              return f"{repo}/blob/{ref}/{path}"
+          relative = r"(?!https?://|mailto:|#|/)([^)\"\s]+)"
+          text = re.sub(r"(\]\()" + relative, lambda m: m.group(1) + absolute(m.group(2)), text)
+          text = re.sub(r"(src=\")" + relative, lambda m: m.group(1) + absolute(m.group(2)), text)
+          text += (
+              "\n\n---\n\n## Liens\n\n"
+              f"- Code source et documentation : [{os.environ['GITHUB_REPOSITORY']}]({repo})\n"
+              f"- Dockerfile : [Dockerfile]({repo}/blob/{ref}/Dockerfile)\n"
+              f"- Signaler un problème : [issues GitHub]({repo}/issues)\n"
+          )
+          open(dst, "w", encoding="utf-8").write(text)
+          PY
+
+      - name: Update Docker Hub description
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        uses: peter-evans/dockerhub-description@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: ${{ env.DOCKERHUB_IMAGE }}
+          short-description: ${{ env.SHORT_DESCRIPTION }}
+          readme-filepath: ${{ runner.temp }}/dockerhub-README.md
