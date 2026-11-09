@@ -1,3 +1,10 @@
+<h1>
+  <img src="./assets/streamEvent-icon.png" alt="" width="48" height="48" align="middle">
+  Basket Live Stream
+</h1>
+
+![streamEvent — Un téléphone sur trépied filme un terrain de basket 3×3](./assets/streamEvent-social.jpg)
+
 # Basket Live Stream
 
 Relais sans interface graphique pour diffuser du basket 3×3 :
