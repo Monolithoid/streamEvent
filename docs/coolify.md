@@ -1,158 +1,152 @@
-# Déploiement Coolify et stockage persistant sur le VPS
+# Coolify deployment and persistent storage on the VPS
 
-Ce guide correspond au `docker-compose.yml` de production du dépôt : trois services,
-`mediamtx`, `relay` et `web`, sans compilation sur le VPS. Les noms des rubriques Coolify
-peuvent varier selon la version installée. Les chemins « hôte » désignent le VPS
-Docker cible, y compris si Coolify est installé sur un autre serveur.
+This guide matches the repository's production `docker-compose.yml`: three services,
+`mediamtx`, `relay` and `web`, with no build on the VPS. Coolify section names may
+vary with the installed version. "Host" paths refer to the target Docker VPS, even
+if Coolify is installed on another server.
 
-Pour recevoir Streamcaster en **RTMPS avec clé de flux secrète**, utiliser plutôt
-la variante autonome décrite dans le [guide RTMPS](rtmps.md), qui inclut le montage
-des certificats et le port TCP 1936. Les étapes ci-dessous concernent le Compose
-RTMP avec authentification de publication.
+To receive Streamcaster over **RTMPS with a secret stream key**, use the standalone
+variant described in the [RTMPS guide](rtmps.md) instead; it includes the certificate
+mount and TCP port 1936. The steps below cover the RTMP Compose file with publishing
+authentication.
 
-## 1. Préparer le déploiement
+## 1. Preparing the deployment
 
-- Disposer d'un VPS Linux amd64 avec Docker et d'un serveur cible opérationnel dans
-  Coolify. La publication actuelle de l'image du relais cible Linux amd64.
-- Publier l'image `monolithoid/streamevent-relay` suivant la procédure du
-  [README](../README.md#images-à-télécharger). Choisir son tag de version, son tag
-  `sha-<SHA complet>` ou son digest pour retrouver exactement la même livraison.
-- Prévoir les ressources des services en plus de Coolify et des autres
-  applications : quotas initiaux de 5 CPU et 1 536 Mio pour `relay`, 1 CPU et
-  512 Mio pour `mediamtx`. Ce sont des limites, pas une mesure de la capacité
-  nécessaire ; valider la charge sur le VPS, notamment en 1080p.
-- Activer YouTube Live et créer un événement dans YouTube Studio. Récupérer son
-  URL RTMPS et sa clé de diffusion. Désactiver l'arrêt automatique de l'événement
-  pour permettre les phases d'attente.
-- Préparer les fichiers persistants décrits en section 4 avant le premier lancement.
+- Have a Linux amd64 VPS with Docker and a working target server in Coolify. The
+  relay image is currently published for Linux amd64.
+- Publish the `monolithoid/streamevent-relay` image following the
+  [README](../README.md#images-to-pull) procedure. Pick its version tag, its
+  `sha-<full SHA>` tag or its digest to get exactly the same release back.
+- Plan the services' resources on top of Coolify and the other applications:
+  initial quotas of 5 CPU and 1,536 MiB for `relay`, 1 CPU and 512 MiB for
+  `mediamtx`. These are limits, not a measure of the required capacity; validate the
+  load on the VPS, especially in 1080p.
+- Enable YouTube Live and create an event in YouTube Studio. Get its RTMPS URL and
+  stream key. Disable the event's auto-stop to allow waiting phases.
+- Prepare the persistent files described in section 4 before the first start.
 
-## 2. Champs de la ressource Coolify
+## 2. Coolify resource fields
 
-Créer une application depuis Git dans le projet et l'environnement souhaités.
+Create an application from Git in the desired project and environment.
 
-| Champ / rubrique | Valeur à renseigner |
+| Field / section | Value to enter |
 | --- | --- |
-| Serveur / destination | Le VPS et la destination Docker qui exécuteront les services. |
-| Dépôt Git | `https://github.com/Monolithoid/streamEvent` ou votre fork ; autoriser l'accès Git si le dépôt est privé. |
-| Branche | `main`, ou la branche contenant le Compose à déployer. |
+| Server / destination | The VPS and the Docker destination that will run the services. |
+| Git repository | `https://github.com/Monolithoid/streamEvent` or your fork; grant Git access if the repository is private. |
+| Branch | `main`, or the branch holding the Compose file to deploy. |
 | Build Pack / type | **Docker Compose**. |
-| Base Directory | `/` : racine du dépôt. |
+| Base Directory | `/`: repository root. |
 | Docker Compose Location | `/docker-compose.yml`. |
-| Domaines | Laisser vide pour `mediamtx` et `relay` ; associer `https://ingest.monolithoid.com` au port cible 8080 de `web` (voir [console](web-console.md)). |
-| Proxy HTTP / port HTTP | Router la console vers `web:8080`. Ne pas associer les ports RTMP/RTMPS au proxy HTTP. |
-| Commandes de build / démarrage | Conserver le comportement Compose ; les images contiennent déjà leurs commandes. |
-| Variables d'environnement | Renseigner les valeurs de la section 3 avant de déployer. |
-| Stockage / Persistent Storage | Vérifier les bind mounts de la section 4 ; ne pas ajouter un second montage sur la même destination. |
-| Healthcheck | Conserver celui du Compose pour `relay` ; aucun endpoint HTTP à saisir. |
-| Déploiement automatique | Au choix ; chaque redéploiement du relais coupe la connexion YouTube. Pour les matchs, préférer un déploiement manuel hors direct. |
+| Domains | Leave empty for `mediamtx` and `relay`; attach `https://ingest.monolithoid.com` to target port 8080 of `web` (see [console](web-console.md)). |
+| HTTP proxy / HTTP port | Route the console to `web:8080`. Do not attach the RTMP/RTMPS ports to the HTTP proxy. |
+| Build / start commands | Keep the Compose behaviour; the images already contain their commands. |
+| Environment variables | Fill in the values from section 3 before deploying. |
+| Storage / Persistent Storage | Check the bind mounts from section 4; do not add a second mount on the same destination. |
+| Healthcheck | Keep the Compose one for `relay`; no HTTP endpoint to enter. |
+| Automatic deployment | Your choice; every relay redeployment drops the YouTube connection. For games, prefer manual deployment outside live broadcasts. |
 
-Le dépôt Git et l'image du relais sont deux sources distinctes : une mise à jour
-de Git ne construit pas l'image dans Coolify. Mettre à jour `RELAY_IMAGE` pour
-déployer une nouvelle version du relais. Si son dépôt Docker Hub est privé,
-configurer l'authentification au registre `docker.io` dans Coolify avec un jeton
-de lecture. Les secrets GitHub Actions `DOCKERHUB_USERNAME` et `DOCKERHUB_TOKEN`
-servent à publier l'image et ne sont pas des variables applicatives à recopier.
+The Git repository and the relay image are two separate sources: a Git update does
+not build the image in Coolify. Update `RELAY_IMAGE` to deploy a new relay version.
+If its Docker Hub repository is private, configure authentication to the `docker.io`
+registry in Coolify with a read-only token. The GitHub Actions secrets
+`DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` are used to publish the image and are not
+application variables to copy over.
 
-Conserver le réseau privé `stream`, les limites, la rotation des logs et la
-politique `restart: unless-stopped` du Compose. Le relais dispose déjà de son
-healthcheck Docker ; l'état `unhealthy` seul ne provoque pas un redémarrage par
-Docker Compose.
+Keep the Compose file's private `stream` network, limits, log rotation and
+`restart: unless-stopped` policy. The relay already has its Docker healthcheck; an
+`unhealthy` state alone does not make Docker Compose restart it.
 
-## 3. Variables à saisir dans Coolify
+## 3. Variables to enter in Coolify
 
-Dans **Environment Variables**, saisir les valeurs sans guillemets englobants.
-Elles doivent être disponibles à l'interpolation du Compose de production lors
-du déploiement. Si Coolify distingue les environnements de prévisualisation,
-ne pas leur donner la clé YouTube de production : une prévisualisation peut
-émettre un flux dès son lancement. Aucun argument de construction d'image
-n'est requis.
+In **Environment Variables**, enter the values without surrounding quotes. They must
+be available for interpolation of the production Compose file at deployment time.
+If Coolify distinguishes preview environments, do not give them the production
+YouTube key: a preview can start streaming as soon as it starts. No image build
+argument is required.
 
-Les valeurs ci-dessous sont celles du Compose et de `.env.example`, sauf
-`ASSETS_DIR` et `MEDIAMTX_CONFIG` qui utilisent ici des chemins persistants absolus
-sur le VPS. Remplacer
-tous les exemples de secrets. Pour les deux comptes MediaMTX, utiliser uniquement
-lettres, chiffres, tirets et underscores : leurs valeurs sont transmises par les variables
-du Compose. Ne pas utiliser `any` comme nom d'utilisateur.
+The values below are those of the Compose file and `.env.example`, except
+`ASSETS_DIR` and `MEDIAMTX_CONFIG`, which use absolute persistent paths on the VPS
+here. Replace all example secrets. For the two MediaMTX accounts, use only letters,
+digits, hyphens and underscores: their values are passed through the Compose
+variables. Do not use `any` as a user name.
 
-### Image, authentification et YouTube
+### Image, authentication and YouTube
 
-| Variable | Valeur / exemple | Rôle |
+| Variable | Value / example | Role |
 | --- | --- | --- |
-| `RELAY_IMAGE` | `monolithoid/streamevent-relay:main` pour un premier essai ; préférer ensuite une version, un tag SHA ou `monolithoid/streamevent-relay@sha256:<digest publié>` | Obligatoire, image déjà publiée du relais. |
-| `PUBLISH_USER` | `phone` | Obligatoire, compte de publication utilisé par le téléphone. |
-| `PUBLISH_PASSWORD` | Un premier secret généré avec `openssl rand -hex 24` | Obligatoire, mot de passe du téléphone. |
-| `READ_USER` | `relay` | Compte de lecture interne ; valeur par défaut si omise. |
-| `READ_PASSWORD` | Un second secret généré avec `openssl rand -hex 24` | Obligatoire, différent du mot de passe de publication ; le téléphone n'en a pas besoin. |
-| `YOUTUBE_RTMPS_URL` | `rtmps://a.rtmps.youtube.com:443/live2` | URL serveur fournie par Studio, sans la clé ; le relais exige RTMPS. |
-| `YOUTUBE_STREAM_KEY` | La clé de l'événement YouTube | Obligatoire, clé seule, sans URL ni `/` ajouté devant. |
+| `RELAY_IMAGE` | `monolithoid/streamevent-relay:main` for a first trial; then prefer a version, a SHA tag or `monolithoid/streamevent-relay@sha256:<published digest>` | Required, already published relay image. |
+| `PUBLISH_USER` | `phone` | Required, publishing account used by the phone. |
+| `PUBLISH_PASSWORD` | A first secret generated with `openssl rand -hex 24` | Required, the phone's password. |
+| `READ_USER` | `relay` | Internal read account; default value if omitted. |
+| `READ_PASSWORD` | A second secret generated with `openssl rand -hex 24` | Required, different from the publishing password; the phone does not need it. |
+| `YOUTUBE_RTMPS_URL` | `rtmps://a.rtmps.youtube.com:443/live2` | Server URL provided by Studio, without the key; the relay requires RTMPS. |
+| `YOUTUBE_STREAM_KEY` | The YouTube event key | Required, the key alone, without URL or leading `/`. |
 
-Marquer les mots de passe et la clé YouTube comme secrets dans Coolify lorsque
-l'interface le permet. Ne pas les inscrire dans Git, les PNG, ni la configuration
-MediaMTX. Les administrateurs Docker/Coolify peuvent accéder à la configuration
-d'exécution : limiter ces accès. Aucun fichier `.env` manuel n'est nécessaire sur
-le VPS pour un déploiement piloté par les variables Coolify.
+Mark the passwords and the YouTube key as secrets in Coolify when the interface
+allows it. Do not write them in Git, the PNGs or the MediaMTX configuration.
+Docker/Coolify administrators can read the runtime configuration: restrict that
+access. No manual `.env` file is needed on the VPS for a deployment driven by Coolify
+variables.
 
-### Réseau, vidéo et ressources
+### Network, video and resources
 
-| Variable | Valeur initiale | Rôle / valeurs acceptées |
+| Variable | Initial value | Role / accepted values |
 | --- | --- | --- |
-| `RTMP_BIND_IP` | `0.0.0.0` | Écoute sur les interfaces du VPS. `127.0.0.1` empêche une connexion directe depuis le téléphone. Une IP précise doit appartenir au VPS. |
-| `RTMP_PORT` | `1935` | Port TCP publié sur le VPS ; doit être libre. Le port du conteneur reste `1935`. |
-| `WIDTH` | `1920` | Largeur de sortie, paire, de 16 à 3840. |
-| `HEIGHT` | `1080` | Hauteur de sortie, paire, de 16 à 2160. |
-| `FPS` | `30` | `25`, `30`, `50` ou `60`. Commencer à 30. |
-| `VIDEO_BITRATE` | `6000k` | Débit vidéo cible ; entier positif avec suffixe facultatif `k` ou `M`. |
-| `ENCODER_PRESET` | `veryfast` | `ultrafast`, `superfast`, `veryfast`, `faster`, `fast` ou `medium`. Les presets plus lents demandent davantage de CPU. |
-| `ENCODER_THREADS` | `4` | Nombre de threads de l'encodeur, de 1 à 16. |
-| `RELAY_CPUS` | `5.0` | Quota CPU du relais, distinct du nombre de threads. Ajuster à la capacité disponible. |
+| `RTMP_BIND_IP` | `0.0.0.0` | Listens on the VPS interfaces. `127.0.0.1` prevents a direct connection from the phone. A specific IP must belong to the VPS. |
+| `RTMP_PORT` | `1935` | TCP port published on the VPS; must be free. The container port stays `1935`. |
+| `WIDTH` | `1920` | Output width, even, from 16 to 3840. |
+| `HEIGHT` | `1080` | Output height, even, from 16 to 2160. |
+| `FPS` | `30` | `25`, `30`, `50` or `60`. Start with 30. |
+| `VIDEO_BITRATE` | `6000k` | Target video bitrate; positive integer with optional `k` or `M` suffix. |
+| `ENCODER_PRESET` | `veryfast` | `ultrafast`, `superfast`, `veryfast`, `faster`, `fast` or `medium`. Slower presets need more CPU. |
+| `ENCODER_THREADS` | `4` | Number of encoder threads, from 1 to 16. |
+| `RELAY_CPUS` | `5.0` | Relay CPU quota, separate from the thread count. Adjust to the available capacity. |
 
-Pour commencer en 720p, saisir `WIDTH=1280`, `HEIGHT=720`, `FPS=30` et
-`VIDEO_BITRATE=3500k`. Préparer un overlay adapté à cette résolution. Les limites
-mémoire (1 536 Mio / 512 Mio) et le quota CPU MediaMTX (`1.0`) sont fixés dans le
-Compose : aucune variable dédiée ne permet de les changer actuellement.
+To start in 720p, enter `WIDTH=1280`, `HEIGHT=720`, `FPS=30` and
+`VIDEO_BITRATE=3500k`. Prepare an overlay suited to that resolution. The memory
+limits (1,536 MiB / 512 MiB) and the MediaMTX CPU quota (`1.0`) are set in the Compose
+file: no dedicated variable can currently change them.
 
-### Fichiers et basculement
+### Files and switching
 
-| Variable | Valeur initiale recommandée | Rôle / valeurs acceptées |
+| Variable | Recommended initial value | Role / accepted values |
 | --- | --- | --- |
-| `MEDIAMTX_CONFIG` | `/opt/basket-live/config/mediamtx.yml` | Chemin absolu du fichier sur le VPS, monté dans `mediamtx` à `/mediamtx.yml`. Valeur par défaut du Compose ; remplacer la valeur locale de `.env.example` dans Coolify. |
-| `ASSETS_DIR` | `/opt/basket-live/assets` | Chemin absolu du dossier sur le VPS, monté dans `relay` à `/assets`. La valeur du dépôt `./assets` utilise les fichiers Git. |
-| `WAITING_IMAGE` | `/assets/waiting.png` | Chemin dans le conteneur, jamais le chemin `/opt/...` du VPS. |
-| `OVERLAY_IMAGE` | `/data/overlay/overlay.png` | PNG généré par `web` et lu en direct par `relay`. Ne pas utiliser `/assets/overlay.png` ici. |
-| `OVERLAY_BASE_IMAGE` | `/assets/overlay.png` | Image statique transparente utilisée comme base du rendu par `web`. |
-| `STALE_SECONDS` | `1.5` | Âge maximal en secondes de la dernière image avant passage en attente, de `0.2` à `10`. |
-| `READY_FRAMES` | `5` | Nombre d'images reçues avant passage au direct, de `1` à `120`. |
-| `OUTPUT_STALL_SECONDS` | `20` | Délai sans progression de l'encodeur avant sa relance, de `5` à `120` secondes. |
+| `MEDIAMTX_CONFIG` | `/opt/basket-live/config/mediamtx.yml` | Absolute path of the file on the VPS, mounted in `mediamtx` at `/mediamtx.yml`. Compose default; replace the local value from `.env.example` in Coolify. |
+| `ASSETS_DIR` | `/opt/basket-live/assets` | Absolute path of the directory on the VPS, mounted in `relay` at `/assets`. The repository value `./assets` uses the Git files. |
+| `WAITING_IMAGE` | `/assets/waiting.png` | Path inside the container, never the `/opt/...` path on the VPS. |
+| `OVERLAY_IMAGE` | `/data/overlay/overlay.png` | PNG generated by `web` and read live by `relay`. Do not use `/assets/overlay.png` here. |
+| `OVERLAY_BASE_IMAGE` | `/assets/overlay.png` | Transparent static image used by `web` as the rendering base. |
+| `STALE_SECONDS` | `1.5` | Maximum age in seconds of the last frame before switching to waiting, from `0.2` to `10`. |
+| `READY_FRAMES` | `5` | Number of frames received before going live, from `1` to `120`. |
+| `OUTPUT_STALL_SECONDS` | `20` | Time without encoder progress before restarting it, from `5` to `120` seconds. |
 
-Le Compose renseigne lui-même `INPUT_URL=rtsp://mediamtx:8554/live` et construit
-`MTX_AUTHINTERNALUSERS_*` à partir des deux comptes. Ne pas les saisir séparément
-dans Coolify. `OUTPUT_URL` est réservé aux tests du contrôleur et n'est pas exposé
-par le Compose de production.
+The Compose file sets `INPUT_URL=rtsp://mediamtx:8554/live` itself and builds
+`MTX_AUTHINTERNALUSERS_*` from the two accounts. Do not enter them separately in
+Coolify. `OUTPUT_URL` is reserved for controller tests and is not exposed by the
+production Compose file.
 
-## 4. Volumes et fichiers persistants sur le VPS
+## 4. Volumes and persistent files on the VPS
 
-L'application ne contient ni base de données, ni enregistrement vidéo, ni état
-de session à conserver sur disque. Les fichiers à conserver sont les images et,
-la configuration MediaMTX copiée sur le VPS. Un volume ne
-permet pas de préserver la connexion YouTube lors d'un redémarrage.
+The application has no database, no video recording and no session state to keep on
+disk. The files to keep are the images and the MediaMTX configuration copied to the
+VPS. A volume cannot preserve the YouTube connection across a restart.
 
-| Service | Source sur le VPS | Destination dans le conteneur | Mode | Configuration |
+| Service | Source on the VPS | Destination in the container | Mode | Configuration |
 | --- | --- | --- | --- | --- |
-| `relay` | `/opt/basket-live/assets` | `/assets` | Bind mount, lecture seule | Définir `ASSETS_DIR=/opt/basket-live/assets` ; montage déjà déclaré dans le Compose. |
-| `mediamtx` | `/opt/basket-live/config/mediamtx.yml` | `/mediamtx.yml` | Bind mount de fichier, lecture seule | Définir `MEDIAMTX_CONFIG` avec le chemin du fichier persistant existant ; valeur par défaut du Compose. |
+| `relay` | `/opt/basket-live/assets` | `/assets` | Bind mount, read-only | Set `ASSETS_DIR=/opt/basket-live/assets`; mount already declared in the Compose file. |
+| `mediamtx` | `/opt/basket-live/config/mediamtx.yml` | `/mediamtx.yml` | File bind mount, read-only | Set `MEDIAMTX_CONFIG` to the path of the existing persistent file; Compose default. |
 
-Pour le déploiement recommandé, créer le dossier des images et le fichier de
-configuration en dehors du répertoire Git de Coolify. Ne pas monter un volume nommé vide à `/assets` :
-les deux PNG doivent être présents dès le démarrage. Ne pas créer de volume
-persistant à `/tmp` : le Compose y prévoit un `tmpfs` de 32 Mio pour les fichiers
-temporaires et le heartbeat. Les journaux sont sur stdout/stderr, avec une rotation
-Docker de trois fichiers de 10 Mo par service ; aucun volume de logs applicatifs
-n'est nécessaire.
+For the recommended deployment, create the images directory and the configuration
+file outside Coolify's Git directory. Do not mount an empty named volume at
+`/assets`: both PNGs must be present from the start. Do not create a persistent volume
+at `/tmp`: the Compose file provides a 32 MiB `tmpfs` there for temporary files and the
+heartbeat. Logs go to stdout/stderr, with Docker rotation of three 10 MB files per
+service; no application log volume is needed.
 
-### Préparer le dossier des images
+### Preparing the images directory
 
-Exécuter sur le VPS cible, depuis une copie du dépôt contenant les PNG (ou adapter
-les chemins sources à l'emplacement de vos propres fichiers) :
+Run on the target VPS, from a copy of the repository containing the PNGs (or adapt
+the source paths to the location of your own files):
 
 ```sh
 sudo install -d -m 0755 /opt/basket-live /opt/basket-live/assets
@@ -162,31 +156,31 @@ sudo ls -ld /opt/basket-live /opt/basket-live/assets
 sudo ls -l /opt/basket-live/assets/waiting.png /opt/basket-live/assets/overlay.png
 ```
 
-Ces commandes copient les exemples et remplacent les fichiers de même nom :
-sur une installation existante, conserver vos images personnalisées. Utiliser
-une attente en 1920×1080 pour le profil par défaut et un overlay PNG RGBA
-transparent. La console pose cette base en haut à gauche et ajoute les textes.
+These commands copy the examples and replace files with the same name: on an existing
+installation, keep your custom images. Use a 1920×1080 waiting image for the default
+profile and a transparent RGBA PNG overlay. The console places this base in the top
+left and adds the text.
 
-Le relais fonctionne avec l'UID/GID `10001:10001`. Les droits `0755` sur les
-dossiers et `0644` sur les PNG permettent la lecture sans lui donner de droits
-d'écriture ; vérifier aussi la traversée des éventuels dossiers parents. Il n'est
-pas nécessaire de changer le propriétaire en `10001` ni de donner les droits `777`.
+The relay runs as UID/GID `10001:10001`. Permissions `0755` on the directories and
+`0644` on the PNGs allow reading without granting write access; also check that any
+parent directories can be traversed. There is no need to change the owner to `10001`
+or to grant `777`.
 
-Dans Coolify, vérifier après résolution du Compose que le service `relay` utilise
-bien la source absolue souhaitée. Les fichiers doivent exister sur le serveur
-Docker, pas seulement sur la machine qui héberge l'interface Coolify. Après un
-changement de l’image d’attente, redémarrer le relais : elle est préchargée. Cette
-opération coupe la connexion RTMPS. Les textes validés dans la console sont
-rechargés sans redémarrage. Après remplacement de la base overlay, redémarrer
-`web` puis valider les zones pour régénérer le PNG partagé.
+In Coolify, check after Compose resolution that the `relay` service really uses the
+intended absolute source. The files must exist on the Docker server, not only on the
+machine hosting the Coolify interface. After changing the waiting image, restart the
+relay: it is preloaded. This drops the RTMPS connection. Text validated in the console
+is reloaded without a restart. After replacing the overlay base, restart `web` and
+validate the areas to regenerate the shared PNG.
 
-Le service `web` conserve ce PNG et ses zones dans le volume `overlay-data`.
-Configurer sa connexion Google et le domaine HTTPS selon le [guide de la console](web-console.md).
+The `web` service keeps this PNG and its areas in the `overlay-data` volume.
+Configure its Google login and HTTPS domain as described in the
+[console guide](web-console.md).
 
-### Préparer la configuration MediaMTX persistante
+### Preparing the persistent MediaMTX configuration
 
-Sur le VPS cible, depuis une copie du dépôt, copier la configuration initiale
-uniquement si vous n'avez pas déjà votre fichier personnalisé :
+On the target VPS, from a copy of the repository, copy the initial configuration
+only if you do not already have your own custom file:
 
 ```sh
 sudo install -d -m 0755 /opt/basket-live/config
@@ -194,9 +188,9 @@ sudo test -e /opt/basket-live/config/mediamtx.yml || sudo install -m 0644 config
 sudo test -f /opt/basket-live/config/mediamtx.yml
 ```
 
-Dans Coolify, définir `MEDIAMTX_CONFIG=/opt/basket-live/config/mediamtx.yml`, ou le
-chemin absolu de votre fichier persistant existant. Le Compose utilise cette
-variable directement ; aucune modification du YAML n'est nécessaire :
+In Coolify, set `MEDIAMTX_CONFIG=/opt/basket-live/config/mediamtx.yml`, or the
+absolute path of your existing persistent file. The Compose file uses this variable
+directly; no YAML change is needed:
 
 ```yaml
 volumes:
@@ -208,82 +202,79 @@ volumes:
       create_host_path: false
 ```
 
-La source est un fichier sur le serveur Docker, pas un dossier ni un nom de
-volume Docker. `create_host_path: false` empêche Docker de créer un répertoire
-si ce fichier manque. Si une tentative précédente a créé un dossier à cet
-emplacement, l'inspecter et utiliser `rmdir` seulement s'il est vide, puis créer
-le fichier. Ne pas ajouter un second montage Coolify sur `/mediamtx.yml`.
-Un volume nommé est un dossier : le monter directement à `/mediamtx.yml` produit
-une incompatibilité dossier/fichier.
+The source is a file on the Docker server, not a directory nor a Docker volume name.
+`create_host_path: false` prevents Docker from creating a directory if the file is
+missing. If an earlier attempt created a directory at that location, inspect it and
+use `rmdir` only if it is empty, then create the file. Do not add a second Coolify
+mount on `/mediamtx.yml`. A named volume is a directory: mounting it directly at
+`/mediamtx.yml` causes a directory/file mismatch.
 
-Pour un lancement local avec le fichier Git, `.env.example` définit
-`MEDIAMTX_CONFIG=./config/mediamtx.yml`. Un chemin relatif est résolu sur l'hôte
-par rapport au fichier Compose, jamais dans le conteneur. Pour Coolify, utiliser
-le chemin absolu persistant ci-dessus. Garder l'authentification via
-`MTX_AUTHINTERNALUSERS_*`, sans vrais mots de passe dans le YAML. Redéployer après
-une modification du fichier ; une mise à jour Git ne remplace pas cette copie.
+For a local start with the Git file, `.env.example` sets
+`MEDIAMTX_CONFIG=./config/mediamtx.yml`. A relative path is resolved on the host
+relative to the Compose file, never inside the container. For Coolify, use the
+absolute persistent path above. Keep authentication through
+`MTX_AUTHINTERNALUSERS_*`, with no real passwords in the YAML. Redeploy after
+changing the file; a Git update does not replace this copy.
 
-### Sauvegardes
+### Backups
 
-Sauvegarder `/opt/basket-live/assets`, le fichier indiqué par `MEDIAMTX_CONFIG`, ainsi que la configuration et les secrets Coolify selon votre procédure
-de sauvegarde. Conserver une copie hors du VPS : un bind mount survit aux
-redéploiements mais pas à la perte du disque. Conserver aussi la référence exacte
-de `RELAY_IMAGE`. Lors d'une restauration, remettre les fichiers et leurs droits
-sur le serveur cible avant de déployer.
+Back up `/opt/basket-live/assets`, the file set in `MEDIAMTX_CONFIG`, and the Coolify
+configuration and secrets according to your backup procedure. Keep a copy off the
+VPS: a bind mount survives redeployments but not the loss of the disk. Also keep the
+exact `RELAY_IMAGE` reference. When restoring, put the files and their permissions
+back on the target server before deploying.
 
-## 5. Réseau et premier lancement
+## 5. Network and first start
 
-| Sens | Port | Action |
+| Direction | Port | Action |
 | --- | --- | --- |
-| Entrant public | TCP `1935`, ou la valeur de `RTMP_PORT` | Autoriser dans le pare-feu du fournisseur/VPS et le filtrage Docker ; aucune autre application ne doit utiliser ce port. |
-| Entrant public | TCP `443` (et `80` si utilisé par ACME HTTP-01/redirection) | Router la console HTTPS vers `web:8080` via Coolify. |
-| Interne Docker | TCP `8080` sur `web` | Accessible au proxy via le réseau Docker ; aucune publication sur le port 8080 du VPS. |
-| Interne Docker | TCP `8554` sur `mediamtx` | Conserver privé ; aucun port hôte à ouvrir. |
-| Sortant | TCP `443` | Autoriser les registres, la diffusion RTMPS YouTube et les échanges OAuth Google. |
-| Sortant | DNS selon la configuration du VPS | Permettre la résolution des noms. |
+| Public inbound | TCP `1935`, or the value of `RTMP_PORT` | Allow in the provider/VPS firewall and Docker filtering; no other application may use this port. |
+| Public inbound | TCP `443` (and `80` if used by ACME HTTP-01/redirect) | Route the HTTPS console to `web:8080` through Coolify. |
+| Docker internal | TCP `8080` on `web` | Reachable by the proxy through the Docker network; not published on VPS port 8080. |
+| Docker internal | TCP `8554` on `mediamtx` | Keep private; no host port to open. |
+| Outbound | TCP `443` | Allow the registries, YouTube RTMPS streaming and Google OAuth exchanges. |
+| Outbound | DNS depending on the VPS configuration | Allow name resolution. |
 
-Le filtrage des ports publiés par Docker peut contourner les règles UFW ;
-vérifier aussi le pare-feu du fournisseur (OVH si utilisé) et `DOCKER-USER`.
-Les accès d'administration Coolify/SSH du VPS restent à gérer suivant votre
-installation. La console nécessite un domaine HTTPS ; `ingest.monolithoid.com`
-peut être partagé avec la réception vidéo grâce aux ports distincts (voir le
-[guide du domaine et de Google OAuth](web-console.md)). Aucun port UDP supplémentaire
-n’est requis. RTMP entrant est en clair : le téléphone reçoit
-uniquement son compte de publication, jamais la clé YouTube.
+Filtering of ports published by Docker can bypass UFW rules; also check the provider
+firewall (OVH if used) and `DOCKER-USER`. Coolify/SSH administration access to the
+VPS remains to be managed according to your installation. The console needs an HTTPS
+domain; `ingest.monolithoid.com` can be shared with the video ingest thanks to the
+separate ports (see the [domain and Google OAuth guide](web-console.md)). No extra UDP
+port is required. Inbound RTMP is unencrypted: the phone only gets its publishing
+account, never the YouTube key.
 
-1. Enregistrer les variables, vérifier les montages et cliquer sur **Deploy**.
-2. Vérifier les logs de téléchargement des deux images, puis les logs des services.
-   Le relais émet immédiatement l'attente et le silence vers YouTube.
-3. Vérifier que `relay` devient sain après le délai de démarrage (30 secondes dans
-   le Compose), puis vérifier la prévisualisation dans YouTube Studio. Cliquer sur
-   « Passer au direct » si le démarrage manuel est activé.
-4. Configurer le téléphone avec
-   `rtmp://ADRESSE_DU_VPS:1935/live?user=phone&pass=MOT_DE_PASSE` en remplaçant
-   le port, l'utilisateur et le mot de passe par vos valeurs. Le chemin reste `live`.
-5. Publier puis arrêter la publication du téléphone. Vérifier les transitions
-   match/attente dans Studio et les logs `switch state=live` / `switch state=waiting`.
-   `output_started` doit rester unique pendant ces transitions normales.
-6. Contrôler CPU et mémoire dans Coolify pendant un essai représentatif avant un
-   match. `scheduler_overrun` invite à réduire la résolution ou la charge CPU.
+1. Save the variables, check the mounts and click **Deploy**.
+2. Check the pull logs of both images, then the service logs.
+   The relay immediately sends the waiting image and silence to YouTube.
+3. Check that `relay` becomes healthy after the start period (30 seconds in the
+   Compose file), then check the preview in YouTube Studio. Click "Go live" if manual
+   start is enabled.
+4. Configure the phone with
+   `rtmp://VPS_ADDRESS:1935/live?user=phone&pass=PASSWORD`, replacing the port, user
+   and password with your values. The path stays `live`.
+5. Publish, then stop publishing from the phone. Check the game/waiting transitions
+   in Studio and the `switch state=live` / `switch state=waiting` logs.
+   `output_started` must stay unique during these normal transitions.
+6. Watch CPU and memory in Coolify during a representative trial before a game.
+   `scheduler_overrun` suggests reducing the resolution or the CPU load.
 
-Pour terminer une session, arrêter le relais puis terminer explicitement
-l'événement dans YouTube Studio. Un redéploiement ou un changement de variables
-qui recrée le relais impose une nouvelle connexion ; un événement clôturé ne se
-rouvre pas automatiquement.
+To end a session, stop the relay, then explicitly end the event in YouTube Studio. A
+redeployment or a variable change that recreates the relay requires a new connection;
+a closed event does not reopen automatically.
 
-## 6. Vérifications en cas d'échec
+## 6. Checks when something fails
 
-| Symptôme | Vérification |
+| Symptom | Check |
 | --- | --- |
-| `Set ...` pendant la résolution Compose | Variable obligatoire absente ou vide dans l'environnement de production Coolify. |
-| Image introuvable / accès refusé | Image publiée, référence `RELAY_IMAGE` exacte et accès Docker Hub configuré si privé. |
-| Échec de lecture des PNG | `ASSETS_DIR` absolu sur le bon VPS, deux fichiers présents, noms et droits corrects ; chemins `/assets/...` dans le conteneur. |
-| MediaMTX refuse `/mediamtx.yml` | `MEDIAMTX_CONFIG` doit désigner un fichier existant sur le VPS ; aucun montage concurrent sur cette destination. |
-| Téléphone refusé ou inaccessible | IP/port, pare-feu, compte de publication, chemin `live` ; un autre téléphone ne doit pas déjà publier sur ce chemin. |
-| Match reçu mais absent sur YouTube | Logs du relais, clé et URL RTMPS, accès sortant, état de l'événement Studio. |
-| `output_lost` ou relais malsain | Connexion sortante, progression de l'encodeur et ressources disponibles ; les volumes ne corrigent pas ces ruptures. |
+| `Set ...` during Compose resolution | Required variable missing or empty in the Coolify production environment. |
+| Image not found / access denied | Image published, exact `RELAY_IMAGE` reference and Docker Hub access configured if private. |
+| PNGs cannot be read | `ASSETS_DIR` absolute on the right VPS, both files present, correct names and permissions; `/assets/...` paths inside the container. |
+| MediaMTX refuses `/mediamtx.yml` | `MEDIAMTX_CONFIG` must point to an existing file on the VPS; no competing mount on this destination. |
+| Phone refused or unreachable | IP/port, firewall, publishing account, `live` path; no other phone may already be publishing on this path. |
+| Game received but missing on YouTube | Relay logs, RTMPS key and URL, outbound access, Studio event state. |
+| `output_lost` or unhealthy relay | Outbound connection, encoder progress and available resources; volumes do not fix these breaks. |
 
-Pour les tests synthétiques et les limites de continuité, voir le
-[README](../README.md), la [validation](validation.md) et
-l'[architecture](architecture.md). Ne pas partager de rendu Compose résolu,
-de dump Docker ou de logs contenant des URL de connexion avec des secrets.
+For synthetic tests and continuity limits, see the [README](../README.md), the
+[validation](validation.md) and the [architecture](architecture.md). Do not share a
+resolved Compose output, a Docker dump or logs containing connection URLs with
+secrets.

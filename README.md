@@ -3,67 +3,68 @@
   Basket Live Stream
 </h1>
 
-![streamEvent — Un téléphone sur trépied filme un terrain de basket 3×3](./assets/streamEvent-social.jpg)
+![streamEvent — A phone on a tripod films a 3×3 basketball court](./assets/streamEvent-social.jpg)
 
 # Basket Live Stream
 
-Relais sans interface graphique pour diffuser du basket 3×3 :
+Headless relay for streaming 3×3 basketball:
 
-**Téléphone → MediaMTX → FFmpeg réception → commutation Python → FFmpeg sortie → YouTube RTMPS.**
+**Phone → MediaMTX → FFmpeg ingest → Python switching → FFmpeg output → YouTube RTMPS.**
 
-La régie propose **Démarrer YouTube** et **Arrêter YouTube**. Au lancement des
-services et après chaque redémarrage du relais, la diffusion reste arrêtée jusqu’à
-un démarrage explicite dans la console ([détails](docs/web-console.md#démarrer-et-arrêter-youtube)).
+The control room offers **Démarrer YouTube** (start YouTube) and **Arrêter YouTube**
+(stop YouTube). When the services start and after every relay restart, the broadcast
+stays stopped until it is explicitly started from the console
+([details](docs/web-console.md#starting-and-stopping-youtube)).
 
-Pendant une diffusion, sans téléphone, la sortie continue avec une image d’attente et du silence. Les
-basculements conservent l’encodeur de sortie et sa connexion. Une panne du réseau
-sortant ou un redémarrage exige en revanche une nouvelle connexion ; la conservation
-du même événement YouTube doit être vérifiée sur YouTube.
+During a broadcast, with no phone connected, the output continues with a waiting image
+and silence. Switching keeps the output encoder and its connection. An outage of the
+outgoing network or a restart, however, requires a new connection; whether the same
+YouTube event is kept must be checked on YouTube.
 
-## Images à télécharger
+## Images to pull
 
-Le Compose de production utilise uniquement `image:`, aucun `build:` :
+The production Compose file only uses `image:`, never `build:`:
 
-| Service | Image | Provenance |
+| Service | Image | Origin |
 | --- | --- | --- |
-| Réception | `bluenviron/mediamtx:1.15.3` | Image officielle du projet MediaMTX |
-| Relais | `monolithoid/streamevent-relay:<version>` | Image de ce projet contenant Python, FFmpeg et le contrôleur |
+| Ingest | `bluenviron/mediamtx:1.15.3` | Official image of the MediaMTX project |
+| Relay | `monolithoid/streamevent-relay:<version>` | This project's image, containing Python, FFmpeg and the controller |
 
-Le relais est construit **dans GitHub Actions**, pas sur le VPS. Sa base est
-l’image officielle Python ; FFmpeg vient des dépôts Debian avec leurs correctifs
-de sécurité. Aucun GPU, OBS, serveur graphique ni paquet Python tiers n’est requis.
-Les bibliothèques multimédias du paquet Debian FFmpeg sont incluses dans l’image.
+The relay is built **in GitHub Actions**, not on the VPS. Its base is the official
+Python image; FFmpeg comes from the Debian repositories with their security fixes.
+No GPU, OBS, display server or third-party Python package is required. The multimedia
+libraries of the Debian FFmpeg package are included in the image.
 
-**L’image du relais doit d’abord être publiée.** La présence de ce dépôt ne signifie
-pas qu’une image Docker Hub est déjà disponible.
+**The relay image must be published first.** Having this repository does not mean a
+Docker Hub image is already available.
 
-1. Créer ou choisir le dépôt **`monolithoid/streamevent-relay`** dans Docker Hub.
-   Créer un jeton d’accès Docker Hub avec les droits de lecture/écriture sur ce
-   dépôt. Ne pas utiliser le mot de passe du compte dans le workflow.
-2. Dans GitHub → Settings → Secrets and variables → Actions, ajouter :
-   - secret `DOCKERHUB_USERNAME` : `monolithoid` ;
-   - secret `DOCKERHUB_TOKEN` : le jeton Docker Hub. Le saisir directement dans
-     GitHub, jamais dans Git, Coolify ou un message de chat.
-   La variable de dépôt `DOCKERHUB_IMAGE` est facultative : elle permet de remplacer
-   la destination par défaut `monolithoid/streamevent-relay`, sans tag ni registre.
-3. Pousser/fusionner sur `main` et autoriser GitHub Actions.
-   Le workflow `Test and publish relay` construit et teste le conteneur, puis publie
-   les tags `main` et `sha-<SHA complet>`. Un tag Git `v…` publie le même tag d’image.
-   Une destination invalide bloque explicitement la publication.
-4. Rendre le dépôt Docker Hub public pour permettre le téléchargement anonyme.
-   Pour un dépôt privé, configurer dans Coolify un accès à `docker.io` avec un
-   compte/jeton de lecture. Avec Compose local, utiliser `docker login` si nécessaire.
-5. Définir `RELAY_IMAGE` avec le tag SHA, une version, ou idéalement le digest indiqué
-   par Actions. `main` est un raccourci mutable pour les premiers essais.
+1. Create or pick the **`monolithoid/streamevent-relay`** repository on Docker Hub.
+   Create a Docker Hub access token with read/write rights on that repository. Do not
+   use the account password in the workflow.
+2. In GitHub → Settings → Secrets and variables → Actions, add:
+   - secret `DOCKERHUB_USERNAME`: `monolithoid`;
+   - secret `DOCKERHUB_TOKEN`: the Docker Hub token. Enter it directly in GitHub,
+     never in Git, Coolify or a chat message.
+   The `DOCKERHUB_IMAGE` repository variable is optional: it replaces the default
+   destination `monolithoid/streamevent-relay`, without tag or registry.
+3. Push/merge to `main` and allow GitHub Actions.
+   The `Test and publish relay` workflow builds and tests the container, then publishes
+   the `main` and `sha-<full SHA>` tags. A Git tag `v…` publishes the same image tag.
+   An invalid destination explicitly blocks publishing.
+4. Make the Docker Hub repository public to allow anonymous pulls.
+   For a private repository, configure access to `docker.io` in Coolify with a
+   read-only account/token. With local Compose, use `docker login` if needed.
+5. Set `RELAY_IMAGE` to the SHA tag, a version, or ideally the digest shown by
+   Actions. `main` is a mutable shortcut for first trials.
 
-Pour un fork ou un autre dépôt Docker Hub, renseigner `DOCKERHUB_IMAGE` et adapter
-`RELAY_IMAGE` au même `compte/depot`, par exemple `compte/depot:main`.
-Les pull requests construisent/testent sans publier. Cible initiale : Linux amd64.
+For a fork or another Docker Hub repository, set `DOCKERHUB_IMAGE` and adjust
+`RELAY_IMAGE` to the same `account/repo`, for example `account/repo:main`.
+Pull requests build/test without publishing. Initial target: Linux amd64.
 
-## Installation Docker Compose
+## Docker Compose installation
 
-Prérequis : Linux, Docker Engine, Compose v2 et Git. Python/FFmpeg sur l’hôte ne
-sont nécessaires que pour les tests de développement.
+Requirements: Linux, Docker Engine, Compose v2 and Git. Python/FFmpeg on the host are
+only needed for development tests.
 
 ```sh
 git clone https://github.com/Monolithoid/streamEvent.git
@@ -74,10 +75,10 @@ openssl rand -hex 24
 openssl rand -hex 24
 ```
 
-Reporter les deux mots de passe différents dans `.env`, remplacer la clé YouTube
-et choisir l’image Docker Hub publiée. Pour les utilisateurs/mots de passe MediaMTX,
-utiliser uniquement lettres, chiffres, tirets et underscores : ils sont transmis
-par les variables du Compose. Ne pas utiliser `any` comme utilisateur.
+Copy the two different passwords into `.env`, replace the YouTube key and pick the
+published Docker Hub image. For MediaMTX users/passwords, use only letters, digits,
+hyphens and underscores: they are passed through the Compose variables. Do not use
+`any` as a user name.
 
 ```sh
 docker compose config --quiet
@@ -87,117 +88,117 @@ docker compose ps
 docker compose logs -f --tail=100 relay mediamtx
 ```
 
-`config --quiet` valide sans afficher les secrets résolus. Ne jamais commiter `.env`,
-une clé YouTube ou des captures de configuration. La diffusion reste arrêtée jusqu’au clic sur « Démarrer YouTube » dans la régie.
+`config --quiet` validates without printing the resolved secrets. Never commit `.env`,
+a YouTube key or configuration screenshots. The broadcast stays stopped until
+« Démarrer YouTube » is clicked in the control room.
 
-## Déploiement Coolify depuis Git
+## Coolify deployment from Git
 
-Le [guide Coolify et stockage VPS](docs/coolify.md) détaille tous les champs de
-déploiement, les variables à renseigner, les montages persistants et les contrôles
-à effectuer avant un match.
+The [Coolify and VPS storage guide](docs/coolify.md) details every deployment field,
+the variables to set, the persistent mounts and the checks to run before a game.
 
-1. Publier l’image Docker Hub comme décrit ci-dessus.
-2. Créer une ressource depuis le dépôt Git, choisir **Docker Compose** avec
-   `/docker-compose.yml`. Ne pas sélectionner Dockerfile/Nixpacks.
-3. Renseigner les variables de `.env.example`, particulièrement `RELAY_IMAGE`, les
-   deux comptes MediaMTX et les paramètres YouTube. Les secrets sont stockés dans Coolify.
-4. Copier `config/mediamtx.yml` dans `/opt/basket-live/config/mediamtx.yml` sur le
-   VPS et définir `MEDIAMTX_CONFIG` avec ce chemin absolu dans Coolify. Ce chemin
-   persistant est aussi la valeur par défaut du Compose. Pour conserver les images
-   indépendamment des redéploiements, les placer sur le VPS, par exemple
-   `/opt/basket-live/assets`, et définir `ASSETS_DIR=/opt/basket-live/assets`.
-   Dossier et fichiers doivent déjà exister et
-   être traversables/lisibles par l’UID 10001, par exemple permissions `755`/`644`.
-5. Dans les volumes Coolify, vérifier que `/mediamtx.yml` pointe vers le fichier
-   persistant du VPS et `/assets` vers le bon dossier. Le montage MediaMTX refuse
-   un chemin absent au lieu de créer un dossier vide.
-6. Ouvrir `1935/TCP` dans le pare-feu OVH et celui du VPS, puis déployer.
-7. Vérifier les logs et la prévisualisation YouTube Studio.
+1. Publish the Docker Hub image as described above.
+2. Create a resource from the Git repository, choose **Docker Compose** with
+   `/docker-compose.yml`. Do not select Dockerfile/Nixpacks.
+3. Fill in the variables from `.env.example`, especially `RELAY_IMAGE`, the two
+   MediaMTX accounts and the YouTube settings. Secrets are stored in Coolify.
+4. Copy `config/mediamtx.yml` to `/opt/basket-live/config/mediamtx.yml` on the
+   VPS and set `MEDIAMTX_CONFIG` to that absolute path in Coolify. This persistent
+   path is also the Compose default. To keep the images independent of redeployments,
+   put them on the VPS, for example in `/opt/basket-live/assets`, and set
+   `ASSETS_DIR=/opt/basket-live/assets`. The directory and files must already exist
+   and be traversable/readable by UID 10001, for example with permissions `755`/`644`.
+5. In the Coolify volumes, check that `/mediamtx.yml` points to the persistent file
+   on the VPS and `/assets` to the right directory. The MediaMTX mount refuses a
+   missing path instead of creating an empty directory.
+6. Open `1935/TCP` in the OVH firewall and the VPS firewall, then deploy.
+7. Check the logs and the YouTube Studio preview.
 
-La réception RTMP seule ne nécessite pas de domaine HTTP. Pour la console,
-configurer `https://ingest.monolithoid.com` sur le proxy Coolify vers `web:8080`
-et Google OAuth selon le [guide de la console](docs/web-console.md). Le même
-domaine peut recevoir le flux sur un port distinct. Le port RTMP doit être libre ; `RTMP_PORT` permet de le changer. Aucun réseau host, socket
-Docker ou privilège étendu. Les limites initiales sont 5 CPU/1,5 Go pour le relais
-et 1 CPU/512 Mo pour MediaMTX ; ajuster après mesure avec les autres services.
+RTMP ingest alone does not need an HTTP domain. For the console, configure
+`https://ingest.monolithoid.com` on the Coolify proxy to `web:8080` and Google OAuth
+as described in the [console guide](docs/web-console.md). The same domain can receive
+the stream on a separate port. The RTMP port must be free; `RTMP_PORT` changes it.
+No host network, Docker socket or extended privileges. The initial limits are
+5 CPU/1.5 GB for the relay and 1 CPU/512 MB for MediaMTX; adjust after measuring
+alongside the other services.
 
-`MEDIAMTX_CONFIG` désigne un fichier sur le serveur Docker, pas un chemin dans le
-conteneur ni un nom de volume Docker. En local, `.env.example` utilise le fichier
-Git `./config/mediamtx.yml`. Les comptes restent configurés par
-les variables numérotées `MTX_AUTHINTERNALUSERS_*`.
+`MEDIAMTX_CONFIG` refers to a file on the Docker server, not a path inside the
+container nor a Docker volume name. Locally, `.env.example` uses the Git file
+`./config/mediamtx.yml`. The accounts stay configured through the numbered
+`MTX_AUTHINTERNALUSERS_*` variables.
 
-## YouTube et gestion des sessions
+## YouTube and session management
 
-Activer YouTube Live à l’avance : l’activation initiale peut être différée. Créer
-un événement et choisir sa clé réutilisable dans YouTube Studio.
+Enable YouTube Live in advance: the initial activation can be delayed. Create an
+event and pick its reusable key in YouTube Studio.
 
 ```dotenv
 YOUTUBE_RTMPS_URL=rtmps://a.rtmps.youtube.com:443/live2
-YOUTUBE_STREAM_KEY=votre-cle-secrete
+YOUTUBE_STREAM_KEY=your-secret-key
 ```
 
-Utiliser l’URL RTMPS fournie par YouTube si elle diffère. **Désactiver l’arrêt
-automatique** dans Studio. Cliquer sur « Démarrer YouTube » dans la régie, vérifier la
-prévisualisation puis cliquer sur « Passer au direct » si le démarrage manuel est actif.
+Use the RTMPS URL provided by YouTube if it differs. **Disable auto-stop** in Studio.
+Click « Démarrer YouTube » in the control room, check the preview, then click
+"Go live" if manual start is enabled.
 
-Entre deux matchs, arrêter uniquement la publication du téléphone : l’attente
-continue tant que la diffusion est active. Pour couper l’envoi vidéo, cliquer sur
-« Arrêter YouTube » dans la régie, puis terminer explicitement l’événement dans
-Studio. Pour arrêter aussi les services :
+Between two games, only stop publishing from the phone: the waiting screen continues
+as long as the broadcast is active. To cut the video feed, click « Arrêter YouTube »
+in the control room, then explicitly end the event in Studio. To also stop the
+services:
 
 ```sh
 docker compose stop relay
-# Reprendre le service, puis cliquer sur « Démarrer YouTube » dans la régie.
-# YouTube peut demander un nouvel événement.
+# Resume the service, then click « Démarrer YouTube » in the control room.
+# YouTube may ask for a new event.
 docker compose start relay
-# Arrêter les services sans supprimer les fichiers montés ni les volumes.
+# Stop the services without deleting mounted files or volumes.
 docker compose down
 ```
 
-Dans Coolify, utiliser les commandes de la ressource. Redéployer le relais ou
-changer sa configuration coupe la connexion RTMPS.
+In Coolify, use the resource's commands. Redeploying the relay or changing its
+configuration drops the RTMPS connection.
 
-## Téléphone Android
+## Android phone
 
-Utiliser une application permettant la publication RTMP personnalisée, par exemple
-Larix Broadcaster (vérifier les fonctions et conditions de la version installée).
-Configurer une connexion RTMP :
+Use an app that supports custom RTMP publishing, for example Larix Broadcaster
+(check the features and terms of the installed version). Configure an RTMP
+connection:
 
 ```text
-rtmp://ADRESSE_DU_VPS:1935/live?user=phone&pass=VOTRE_MOT_DE_PASSE
+rtmp://VPS_ADDRESS:1935/live?user=phone&pass=YOUR_PASSWORD
 ```
 
-Remplacer `phone` par `PUBLISH_USER`. Si l’application sépare serveur et clé :
-serveur `rtmp://ADRESSE_DU_VPS:1935`, clé `live?user=phone&pass=VOTRE_MOT_DE_PASSE`.
-Les champs d’authentification propres à l’application peuvent différer ; cette URL
-utilise le mécanisme MediaMTX vérifié par le test synthétique.
+Replace `phone` with `PUBLISH_USER`. If the app separates server and key:
+server `rtmp://VPS_ADDRESS:1935`, key `live?user=phone&pass=YOUR_PASSWORD`.
+App-specific authentication fields may differ; this URL uses the MediaMTX mechanism
+verified by the synthetic test.
 
-Choisir H.264, AAC, paysage, 1080p30 à environ 6 Mbit/s si le réseau montant le
-permet, sinon 720p30 à 3–4 Mbit/s. Désactiver l’économie de batterie de l’application
-et tester sur le terrain. RTMP ne chiffre ni les identifiants ni la vidéo. Ne
-jamais utiliser la clé YouTube ou un mot de passe réutilisé ailleurs sur le téléphone.
+Choose H.264, AAC, landscape, 1080p30 at about 6 Mbit/s if the uplink allows it,
+otherwise 720p30 at 3–4 Mbit/s. Disable the app's battery saving and test on site.
+RTMP encrypts neither the credentials nor the video. Never use the YouTube key or a
+password reused elsewhere on the phone.
 
-## Entrée RTMPS pour Streamcaster
+## RTMPS ingest for Streamcaster
 
-La variante autonome [`docker-compose.rtmps.yml`](docker-compose.rtmps.yml)
-permet de publier sans identifiant/mot de passe avec une clé secrète
-`INGEST_STREAM_KEY`, avec chiffrement TLS et lecture
-interne du relais authentifiée. Elle exige un certificat valide monté depuis le
-VPS ; le certificat HTTPS du proxy Coolify n'est pas automatiquement disponible.
-Voir le [guide RTMPS, certificats et renouvellement](docs/rtmps.md).
+The standalone variant [`docker-compose.rtmps.yml`](docker-compose.rtmps.yml)
+allows publishing without a user name/password using a secret key
+`INGEST_STREAM_KEY`, with TLS encryption and authenticated internal reading by the
+relay. It requires a valid certificate mounted from the VPS; the Coolify proxy's
+HTTPS certificate is not automatically available.
+See the [RTMPS, certificates and renewal guide](docs/rtmps.md).
 
-## Images et paramètres
+## Images and settings
 
-Les PNG fournis sont des exemples neutres. Remplacer `waiting.png` par une image
-1920×1080 et `overlay.png` par un PNG RGBA transparent. La console utilise cet
-overlay comme base en haut à gauche, puis ajoute les zones
-de texte. Le résultat couvre le match et l’attente.
+The provided PNGs are neutral examples. Replace `waiting.png` with a 1920×1080
+image and `overlay.png` with a transparent RGBA PNG. The console uses this overlay
+as the base in the top left, then adds the text areas. The result covers both the
+game and the waiting screen.
 
-L’attente et la vidéo sont redimensionnées en conservant les proportions.
-Redémarrer le relais après remplacement de l’attente, qui est préchargée.
-Les zones validées dans la console sont rechargées en direct sans redémarrage.
-Après remplacement du fichier de base `overlay.png`, redémarrer `web` puis
-valider à nouveau les zones pour régénérer l’image diffusée.
+The waiting image and the video are resized while keeping their aspect ratio.
+Restart the relay after replacing the waiting image, which is preloaded.
+Areas validated in the console are reloaded live without a restart.
+After replacing the `overlay.png` base file, restart `web` and validate the areas
+again to regenerate the broadcast image.
 
 ```dotenv
 WIDTH=1280
@@ -211,63 +212,63 @@ OVERLAY_IMAGE=/data/overlay/overlay.png
 OVERLAY_BASE_IMAGE=/assets/overlay.png
 ```
 
-FPS acceptés : 25, 30, 50, 60 ; démarrer à 30. Sortie H.264/YUV420p, GOP de deux
-secondes, débit vidéo cible constant. AAC toujours présent, stéréo 48 kHz/128 kbit/s,
-y compris lorsque le téléphone n’a pas de piste audio.
+Accepted FPS: 25, 30, 50, 60; start with 30. H.264/YUV420p output, two-second GOP,
+constant target video bitrate. AAC always present, stereo 48 kHz/128 kbit/s, even
+when the phone has no audio track.
 
-## Réseau et SRT ultérieur
+## Network and future SRT
 
-| Direction | Port | Usage |
+| Direction | Port | Use |
 | --- | --- | --- |
-| Public entrant | TCP 1935 par défaut | Téléphone RTMP |
-| Docker privé | TCP 8554 | Lecture RTSP du relais |
-| Sortant | TCP 443 | RTMPS YouTube et images HTTPS |
-| Sortant | DNS selon l’hôte | Résolution des noms |
+| Public inbound | TCP 1935 by default | RTMP phone |
+| Private Docker | TCP 8554 | RTSP reading by the relay |
+| Outbound | TCP 443 | YouTube RTMPS and HTTPS images |
+| Outbound | DNS depending on the host | Name resolution |
 
-API, métriques, HLS, WebRTC et SRT sont désactivés. RTSP utilise TCP uniquement,
-sans port RTP/UDP. Les ports Docker peuvent contourner certaines règles UFW :
-vérifier le filtrage OVH et la chaîne DOCKER-USER.
+API, metrics, HLS, WebRTC and SRT are disabled. RTSP uses TCP only, with no RTP/UDP
+port. Docker ports can bypass some UFW rules: check the OVH filtering and the
+DOCKER-USER chain.
 
-SRT reste une évolution de configuration à valider : activer `srt: yes`, publier
-`8890:8890/udp`, configurer le `streamid` MediaMTX
-`publish:live:utilisateur:motdepasse` dans le téléphone. Pour chiffrer, définir
-`srtPublishPassphrase` sur le chemin et la même passphrase dans l’application.
-Vérifier les paramètres avec la version épinglée avant ouverture du port.
-La lecture RTSP interne et le relais restent identiques.
+SRT remains a configuration change to validate: enable `srt: yes`, publish
+`8890:8890/udp`, configure the MediaMTX `streamid`
+`publish:live:user:password` in the phone. For encryption, set
+`srtPublishPassphrase` on the path and the same passphrase in the app.
+Check the settings with the pinned version before opening the port.
+The internal RTSP reading and the relay stay the same.
 
-## Tests sans YouTube
+## Tests without YouTube
 
-Prérequis de test : Docker Compose, Python ≥3.10, FFmpeg/ffprobe avec libx264 sur
-l’hôte. Le projet de test est indépendant et utilise uniquement les ports loopback
-19350 et 18554, avec des identifiants factices. Ne pas lancer deux tests simultanés.
+Test requirements: Docker Compose, Python ≥3.10, FFmpeg/ffprobe with libx264 on the
+host. The test project is independent and only uses loopback ports 19350 and 18554,
+with dummy credentials. Do not run two tests at the same time.
 
 ```sh
 python3 -m unittest discover -s tests -v
 docker compose --env-file .env.example config --quiet
 python3 tests/integration.py
-# Tester exactement le conteneur publié, son FFmpeg et son UID non root :
-python3 tests/integration.py --image monolithoid/streamevent-relay:VOTRE_TAG
+# Test exactly the published container, its FFmpeg and its non-root UID:
+python3 tests/integration.py --image monolithoid/streamevent-relay:YOUR_TAG
 ```
 
-Les logs et `continuous.flv` restent dans `test-results/`, ignoré par Git. Le test
-vérifie les basculements, les timestamps, les pixels, le son/silence et la reprise
-après panne du récepteur. Il nettoie ses conteneurs en fin d’exécution.
-Voir [la procédure complète](docs/validation.md).
+Logs and `continuous.flv` stay in `test-results/`, ignored by Git. The test checks
+switching, timestamps, pixels, sound/silence and recovery after an ingest outage.
+It cleans up its containers when done.
+See [the full procedure](docs/validation.md).
 
-Source synthétique manuelle pour tester le VPS :
+Manual synthetic source to test the VPS:
 
 ```sh
 ffmpeg -re -f lavfi -i 'testsrc2=size=1280x720:rate=30' \
   -re -f lavfi -i 'sine=frequency=880:sample_rate=48000' \
   -c:v libx264 -preset veryfast -tune zerolatency -g 60 \
   -c:a aac -f flv \
-  'rtmp://ADRESSE_DU_VPS:1935/live?user=phone&pass=MOT_DE_PASSE'
+  'rtmp://VPS_ADDRESS:1935/live?user=phone&pass=PASSWORD'
 ```
 
-Ctrl-C simule le départ du téléphone. Sans audio : enlever l’entrée `sine` et
-remplacer `-c:a aac` par `-an`. Ne pas partager l’historique contenant le mot de passe.
+Ctrl-C simulates the phone leaving. Without audio: remove the `sine` input and
+replace `-c:a aac` with `-an`. Do not share the shell history containing the password.
 
-## Logs, santé et ressources
+## Logs, health and resources
 
 ```sh
 docker compose logs --tail=100 -f relay
@@ -276,44 +277,42 @@ docker stats --no-stream
 docker compose top relay
 ```
 
-Dans Coolify : Logs et Metrics, ou les mêmes commandes depuis le dossier de
-déploiement. `switch state=live/waiting` indique un basculement ; `output_started`
-doit rester unique pendant les transitions normales. `output_lost` indique une
-rupture sortante ; `decoder_stalled` une réception bloquée ; `scheduler_overrun`
-une incapacité à tenir la cadence. Réduire la résolution/charge dans ce dernier cas.
-Rotation des logs : trois fichiers de 10 Mo par service.
+In Coolify: Logs and Metrics, or the same commands from the deployment directory.
+`switch state=live/waiting` indicates a switch; `output_started` must stay unique
+during normal transitions. `output_lost` indicates an outgoing break;
+`decoder_stalled` a stuck ingest; `scheduler_overrun` an inability to keep up with
+the frame rate. Reduce the resolution/load in that last case.
+Log rotation: three 10 MB files per service.
 
-Le healthcheck vérifie l’avancement de l’encodage pendant la diffusion, ou le
-fonctionnement de la boucle du relais lorsque YouTube est volontairement arrêté. Docker Compose ne redémarre pas
-un conteneur simplement « unhealthy » : le contrôleur gère lui-même ses processus.
-`unless-stopped` reprend un processus principal mort, pas un événement YouTube clôturé.
+The healthcheck verifies encoding progress during a broadcast, or that the relay
+loop is running when YouTube is deliberately stopped. Docker Compose does not
+restart a container that is merely "unhealthy": the controller manages its own
+processes. `unless-stopped` restarts a dead main process, not a closed YouTube event.
 
-Les logs du relais masquent les URL et secrets connus. Les variables Docker et
-arguments FFmpeg restent accessibles aux administrateurs de l’hôte : protéger
-l’accès VPS/Coolify et ne pas publier un dump d’inspection.
+The relay logs mask known URLs and secrets. Docker variables and FFmpeg arguments
+remain visible to the host administrators: protect VPS/Coolify access and do not
+publish an inspection dump.
 
-## Limites
+## Limits
 
-Une panne du VPS, du réseau sortant ou de YouTube exige une reconnexion, avec un
-délai progressif de 1 à 30 secondes. YouTube décide de conserver ou non l’événement.
-La stabilité en conditions réelles, la charge 1080p et la synchronisation labiale
-doivent être mesurées avant un match public.
+An outage of the VPS, the outgoing network or YouTube requires a reconnection, with
+a progressive delay from 1 to 30 seconds. YouTube decides whether to keep the event.
+Real-world stability, 1080p load and lip sync must be measured before a public game.
 
-La sélection de la dernière image et le tampon audio d’une demi-seconde privilégient
-une mémoire/latence bornées. Ils ne garantissent pas une synchronisation labiale
-précise pour tous les téléphones. Un changement de pistes audio en cours de flux
-demande une reconnexion. Une image figée dont les paquets continuent n’est pas
-détectée comme une panne.
+Picking the latest frame and the half-second audio buffer favour bounded
+memory/latency. They do not guarantee precise lip sync for every phone. A change of
+audio tracks mid-stream requires a reconnection. A frozen image whose packets keep
+arriving is not detected as an outage.
 
-Voir [l’architecture](docs/architecture.md). Licence MIT.
+See [the architecture](docs/architecture.md). MIT licence.
 
-Les [résultats locaux](docs/test-report.md) détaillent ce qui a été vérifié et les
-limites des sources synthétiques.
+The [local results](docs/test-report.md) detail what was verified and the limits of
+synthetic sources.
 
-## Console web privée et overlay modifiable
+## Private web console and editable overlay
 
-Une console intégrée permet de définir des zones de texte (score, équipes, événement),
-de prévisualiser puis valider un PNG avec canal alpha, rechargé en direct par FFmpeg.
-Elle affiche aussi l’état du relais et exige une connexion Google avec une liste
-de comptes autorisés. Voir [la configuration de la console](docs/web-console.md)
-pour le domaine HTTPS, les variables OAuth et le fonctionnement des volumes persistants.
+A built-in console lets you define text areas (score, teams, event), preview and
+then validate a PNG with an alpha channel, reloaded live by FFmpeg. It also shows
+the relay status and requires a Google login with a list of allowed accounts. See
+[the console configuration](docs/web-console.md) for the HTTPS domain, the OAuth
+variables and how the persistent volumes work.
