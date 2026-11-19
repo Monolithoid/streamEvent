@@ -12,7 +12,7 @@ permissions:
 env:
   DOCKERHUB_IMAGE: ${{ vars.DOCKERHUB_IMAGE || 'monolithoid/streamevent-relay' }}
   # Docker Hub short description: 100 bytes max (accented characters count double).
-  SHORT_DESCRIPTION: "Relais vers YouTube pour le basket 3×3 : MediaMTX, FFmpeg et régie web"
+  SHORT_DESCRIPTION: "YouTube relay for 3×3 basketball: MediaMTX, FFmpeg and web control room"
 
 jobs:
   verify:
@@ -119,10 +119,10 @@ jobs:
           text = re.sub(r"(\]\()" + relative, lambda m: m.group(1) + absolute(m.group(2)), text)
           text = re.sub(r"(src=\")" + relative, lambda m: m.group(1) + absolute(m.group(2)), text)
           text += (
-              "\n\n---\n\n## Liens\n\n"
-              f"- Code source et documentation : [{os.environ['GITHUB_REPOSITORY']}]({repo})\n"
-              f"- Dockerfile : [Dockerfile]({repo}/blob/{ref}/Dockerfile)\n"
-              f"- Signaler un problème : [issues GitHub]({repo}/issues)\n"
+              "\n\n---\n\n## Links\n\n"
+              f"- Source code and documentation: [{os.environ['GITHUB_REPOSITORY']}]({repo})\n"
+              f"- Dockerfile: [Dockerfile]({repo}/blob/{ref}/Dockerfile)\n"
+              f"- Report a problem: [GitHub issues]({repo}/issues)\n"
           )
           open(dst, "w", encoding="utf-8").write(text)
           PY
